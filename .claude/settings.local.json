@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(pip3 show *)",
+      "Bash(conda run *)",
+      "Bash(uv python *)",
+      "Bash(uv pip *)",
+      "Bash(uv venv *)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python train.py --quick)",
+      "Bash(.venv/bin/python train.py)"
+    ]
+  }
+}

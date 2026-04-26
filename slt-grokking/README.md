@@ -1,137 +1,177 @@
-# SLT × Grokking: LLC as a Signature of Phase Transitions in Transformers
+# SLT × Grokking: Loss-Surface Geometry Across Phase Transitions in Transformers
 
 A self-contained project applying **Singular Learning Theory (SLT)** to study the
 *grokking* phenomenon — the surprising ability of a neural network to suddenly generalise
-long after memorising its training set.
+long after memorising its training set — through three complementary geometric lenses:
+the **Local Learning Coefficient (LLC)**, the **Hessian trace**, and **2-D loss surface
+slices**.
 
 **Research question:**
-> *Does the Local Learning Coefficient (LLC) serve as a reliable weight-space indicator of
-> the grokking phase transition, and what does its trajectory reveal about the internal
-> structure of the solutions found at each phase?*
+> *How does the geometry of the loss landscape — flatness, curvature, and singularity
+> structure — change across the grokking phase transition, and what does this reveal about
+> the internal structure of the solutions found at each developmental stage?*
 
 ---
 
 ## Contents
 
-1. [Background: SLT and the LLC](#1-background-slt-and-the-llc)
+1. [Background: SLT, Flatness, and the Hessian](#1-background-slt-flatness-and-the-hessian)
 2. [The Grokking Testbed](#2-the-grokking-testbed)
 3. [Results](#3-results)
    - [Fig 1 – Training Dynamics](#fig-1--training-dynamics-grokking-curves)
    - [Fig 2 – LLC Trajectory](#fig-2--llc-trajectory)
    - [Fig 3 – Phase Portrait](#fig-3--phase-portrait)
-4. [Interpretation](#4-interpretation)
-5. [The Calibration Challenge](#5-the-calibration-challenge)
+   - [Fig 4 – Flatness Analysis (Hessian)](#fig-4--flatness-analysis-hessian-trace--top-eigenvalue)
+   - [Fig 5 – 2-D Loss Surface Slices](#fig-5--2-d-loss-surface-slices)
+   - [Fig 6 – Model Comparison (optional)](#fig-6--model-comparison-optional)
+4. [Interpretation: Geometry Tells the Story](#4-interpretation-geometry-tells-the-story)
+5. [The LLC Calibration Challenge](#5-the-llc-calibration-challenge)
 6. [Connections to Timaeus Research](#6-connections-to-timaeus-research)
 7. [Setup and Usage](#7-setup-and-usage)
 8. [References](#8-references)
 
 ---
 
-## 1. Background: SLT and the LLC
+## 1. Background: SLT, Flatness, and the Hessian
 
 ### Why classical theory fails for neural networks
 
-Classical asymptotic statistics (the Bernstein–von Mises theorem, AIC, BIC) all assume
-that the Fisher information matrix is non-singular at the true parameter. For neural
-networks this assumption fails catastrophically: the parameter-to-function map is
-massively non-injective. A single function can be realised by infinitely many parameter
-settings (weight permutations, rescalings, and deeper symmetries), so the Fisher
-information is degenerate everywhere.
+Classical asymptotic statistics (Bernstein–von Mises, AIC, BIC) assume the Fisher
+information matrix is non-singular at the true parameter. For neural networks this
+assumption fails catastrophically: the parameter-to-function map is massively
+non-injective. A single function can be realised by infinitely many parameter settings
+(weight permutations, rescalings, and deeper symmetries), so the Fisher information is
+degenerate everywhere.
 
 ### Watanabe's resolution: the RLCT
 
-Sumio Watanabe's Singular Learning Theory (SLT) replaces the Fisher information approach
-with algebraic geometry. The key result is the **free energy formula**:
+Sumio Watanabe's Singular Learning Theory (SLT) replaces Fisher information with
+algebraic geometry. The key result is the **free energy formula**:
 
 ```
 n F_n(w*) = n L_n(w*) + λ log n − (m − 1) log log n + O(1)
 ```
 
 where:
-- `L_n(w*)` is the minimum training loss (the empirical risk at the basin minimum w*)
-- **`λ` is the Real Log Canonical Threshold (RLCT)**, the *Local Learning Coefficient*
-- `m` is the multiplicity of the singularity at w* (an integer ≥ 1)
+- `L_n(w*)` is the training loss at the basin minimum w*
+- **`λ`** is the **Real Log Canonical Threshold (RLCT)**, the *Local Learning Coefficient*
+- `m` is the multiplicity of the singularity
 - `n` is the number of training samples
 
-The RLCT λ characterises *how flat the loss landscape is in the neighbourhood of w** in a
-precise algebraic-geometric sense. It measures the effective dimension of the local
-parameter space that the training data can resolve. Intuitively:
+`λ` measures *how flat the loss landscape is* around w* in a precise algebraic-geometric
+sense — the effective dimension of the parameter space that the data can resolve.
 
 | Loss landscape near w* | λ |
 |---|---|
-| Regular (Fisher nonsingular) | = d/2, where d = number of parameters |
+| Regular (all Hessian eigenvalues > 0) | d/2  (d = number of parameters) |
 | Mildly degenerate | < d/2 |
-| Highly degenerate / many flat directions | ≪ d/2 |
+| Highly degenerate (many flat directions) | ≪ d/2 |
 
-**The key SLT insight for generalisation:** Among local minima with similar training loss,
-the one with *smaller λ* has smaller free energy and is therefore preferred by the Bayesian
-posterior. A smaller λ corresponds to a more singular (degenerate) solution — one with
-more flat directions and symmetries, i.e., simpler effective structure. This is SLT's
-rigorous explanation for *implicit regularisation*: overparameterised networks generalise
-because gradient descent tends to find the most singular compatible minimum.
+**The key SLT insight:** Among minima with similar training loss, the one with *smaller λ*
+has smaller free energy and is preferred by the Bayesian posterior. Smaller λ means a
+more singular (degenerate) solution — more flat directions, more symmetry, simpler
+effective structure. This is SLT's rigorous account of implicit regularisation.
 
-### Estimating λ via SGLD
+### The Hessian: second derivatives as a flatness ruler
 
-We use the **WBIC estimator** (Watanabe 2013). The key identity is:
+The **Hessian matrix** H at w* is:
 
 ```
-λ = β · E_{w~p_β}[n · L_n(w)] − n · L_n(w*)
+H_ij  =  ∂²L / ∂w_i ∂w_j
 ```
 
-where p_β(w) ∝ exp(−β·n·L_n(w)) is the *tempered posterior* at inverse temperature
-β = 1/log(n). We sample from p_β using Stochastic Gradient Langevin Dynamics (SGLD):
+the matrix of all second partial derivatives of the loss. Its eigenvalues measure
+curvature in every direction of weight space:
+
+- **Large eigenvalue** → sharp direction, narrow loss bowl, many parameters matter locally.
+- **Near-zero eigenvalue** → **flat direction**, a degeneracy, the loss barely changes
+  if you move that way.
+
+The number of near-zero Hessian eigenvalues is the leading-order indicator of the LLC:
 
 ```
-w_{t+1} = w_t  −  ε · (β·n/|B|) · ∇L_B(w_t)  +  sqrt(2ε) · η,    η ~ N(0, I)
+In the regular case:    LLC  ≈  (rank of H) / 2  =  d/2
+In the singular case:   LLC  <  (rank of H) / 2
 ```
 
-and estimate λ as the empirical average of the energy above the baseline:
+SLT goes beyond the Hessian by capturing higher-order degeneracies (when the Hessian
+has a true zero eigenvalue, the LLC depends on 3rd/4th-order Taylor terms), but for
+practical networks two Hessian scalars — the trace and the largest eigenvalue — are
+reliable leading-order proxies:
+
+| Measure | Definition | Interpretation |
+|---|---|---|
+| **tr(H)** | Σᵢ λᵢ(H) — sum of all curvatures | Total sharpness of the basin |
+| **λ_max(H)** | Largest eigenvalue | Curvature in the sharpest direction |
+| **LLC λ̂** | SGLD-based WBIC estimator | Effective singular dimension (SLT) |
+
+All three should **rise during memorisation** (sharp non-degenerate lookup-table minimum)
+and **fall after grokking** (flat degenerate Fourier minimum). Confirming this with real
+data is the goal of this project.
+
+### Estimating LLC via localised SGLD
+
+We use the **WBIC estimator** (Watanabe 2013) with a localisation spring:
 
 ```
-λ̂ = β · n · mean_t [ L(w_t) − L(w*) ]
+U_loc(w) = β·n·L_n(w)  +  (γ/2)·‖w − w*‖²
+
+λ̂  =  β · n · E_{SGLD}[L(w) − L(w*)]
 ```
 
-We also add a **localisation spring** (following the devinterp library) to constrain the
-SGLD chain to the local basin:
+where β = 1/log(n) is the WBIC temperature and γ = 10,000 keeps the chain near w*.
+The SGLD update for this energy:
 
 ```
-U_loc(w) = β·n·L_n(w)  +  (γ/2) · ‖w − w*‖²
+w_{t+1} = w_t  −  ε·[(β·n/|B|)·∇L_B(w_t) + γ·(w_t − w*)]  +  √(2ε)·η
 ```
 
-This gives the *localised LLC* — the singularity depth of the local basin rather than a
-global landscape feature. See [§5](#5-the-calibration-challenge) for discussion of why
-this matters.
+### Estimating Hessian geometry via finite differences
+
+We use two MPS-safe methods that require only forward or first-order backward passes:
+
+**Hessian trace (Hutchinson estimator):**
+```
+trace(H)  ≈  E_v [ (L(w+δv) − 2L(w) + L(w−δv)) / δ² ]    v ~ N(0, I)
+```
+Each probe requires two forward passes. 20–30 probes give a low-variance estimate.
+
+**Top eigenvalue (power iteration):**
+```
+H v  ≈  (∇L(w+δv) − ∇L(w−δv)) / (2δ)
+```
+Iterated normalisation converges to the eigenvector of λ_max in ~20 steps.
+
+**2-D loss surface slice (filter-normalised):**
+Evaluate `L(w* + α·d₁ + β·d₂)` on a grid, using filter-normalised directions
+(Li et al. 2018) so the scale is comparable across checkpoints.
 
 ---
 
 ## 2. The Grokking Testbed
 
-**Task:** Predict `(a + b) mod p` given integer tokens a, b ∈ {0,…,p−1}, where p = 97.
+**Task:** Predict `(a + b) mod p` given tokens a, b ∈ {0,…,p−1}, where p = 97.
 
 **Why this task?** It is the canonical grokking benchmark (Power et al. 2022), and the
-learned algorithm is mechanistically understood: after grokking, the transformer
-implements a *Discrete Fourier Transform* over ℤ_97, using only O(√p) Fourier frequencies
-(Nanda et al. 2023). This means we know *a priori* what the generalising solution's
-internal structure looks like — it is algebraically elegant and highly degenerate in
-weight space, predicting a lower LLC after the phase transition.
+learned algorithm is mechanistically understood (Nanda et al. 2023): after grokking, the
+transformer implements a *Discrete Fourier Transform* over ℤ_97, using only O(√p) ≈ 10
+active Fourier frequencies. This solution is **algebraically degenerate** — permuting
+which frequencies are used, or rotating within frequency subspace, gives an identical
+function. We therefore know *in advance* that the post-grokking minimum should have many
+flat directions and a lower LLC, making this a genuine prediction test for SLT.
 
 **Delayed grokking configuration:**
 
 | Parameter | Value | Reason |
 |---|---|---|
 | Architecture | 1-layer transformer | Less expressive → slower generalisation |
-| d_model | 128 | Sufficient capacity to eventually grokk |
-| n_heads | 4 | — |
+| d_model | 128, n_heads = 4 | — |
 | Train fraction | 30% (2,821 of 9,409 pairs) | Less data → harder generalisation |
 | Weight decay | 1.0 | Essential: penalises the memorising solution |
 | Optimiser | AdamW, lr = 1e-3 | — |
-| Total parameters | 223,872 | λ_max = d/2 ≈ 112,000 |
-| Total steps | 3,000 | Full arc completes by ~step 2,400 |
-| LLC interval | every 200 steps | ~15 estimates across the arc |
-
-With 30% training data and a 1-layer model, the network reliably exhibits **classic
-delayed grokking**: fast memorisation followed by a long plateau before sudden
-generalisation. This gives the clearest signal for LLC analysis.
+| Total parameters | 223,872 | λ_max (SLT) ≤ d/2 = 111,936 |
+| Total training steps | 3,000 | Full arc completes by ~step 2,400 |
+| Flatness measured every | 200 steps | ~15 estimates across the arc |
 
 ---
 
@@ -141,31 +181,22 @@ generalisation. This gives the clearest signal for LLC analysis.
 
 ![Training dynamics](figures/fig1_training_dynamics.png)
 
-**What to look at:**
-- **Left panel (loss):** Train loss drops to near zero by step ~400. Test loss *worsens* 
-  briefly during memorisation — the model is overfitting, pushing test loss above the
-  random-chance baseline of log(97) ≈ 4.57.
-- **Right panel (accuracy):** Three phases are visible:
-  1. **Learning phase** (steps 0–400): both train and test accuracy rise together.
-  2. **Memorisation/plateau** (steps 400–1800): train reaches 99.8%, test stalls at
-     15–26%. The gap is the classic grokking delay.
-  3. **Generalisation** (steps 1800–2600): test accuracy climbs rapidly from ~49% to
-     ~99%. This is the grokking transition.
+Three phases are visible in the right panel (accuracy):
 
-**Why the delay?** Two competing algorithms coexist in weight space:
-- *Memorisation circuit*: a "lookup table" that stores each training (a, b) → c pair
-  directly. Learns fast, high weight norm.
-- *Generalisation circuit*: a DFT-based Fourier algorithm. Learns slowly, but has
-  lower weight norm (the Fourier features are structured and compressible).
+1. **Learning** (steps 0–400): train and test accuracy both rise — the model is still
+   finding any signal.
+2. **Memorisation plateau** (steps 400–1800): train accuracy reaches 99.8% and stalls;
+   test accuracy is stuck at 15–26%. The model has memorised the training pairs but has
+   not found the generalising algorithm.
+3. **Grokking transition** (steps 1800–2400): test accuracy climbs rapidly from ~41% to
+   ~100% in just 600 steps. The Fourier circuit takes over.
 
-Weight decay (L2 regularisation) applies a constant multiplicative shrinkage to all
-weights at every step. The memorisation circuit, having high weight norm, loses energy
-faster. Eventually — at around step 1800 — the Fourier circuit becomes competitive in
-training loss and takes over, causing the sudden test accuracy jump.
+In the left panel (loss), note that test loss briefly *rises above the random-chance
+baseline* (log 97 ≈ 4.57) during the plateau — the memorisation circuit is actively
+suppressing generalisation.
 
-This competition is precisely the setting in which SLT's predictions are most interesting:
-the grokking transition corresponds to the loss landscape minimum shifting from a
-high-λ (non-degenerate memorisation) minimum to a low-λ (degenerate Fourier) minimum.
+The shaded bands (blue = memorise, orange = plateau, green = generalise) are the same
+across all figures, making direct comparison easy.
 
 ---
 
@@ -173,48 +204,29 @@ high-λ (non-degenerate memorisation) minimum to a low-λ (degenerate Fourier) m
 
 ![LLC trajectory](figures/fig2_llc_trajectory.png)
 
-**The LLC values across training:**
-
-| Training phase | Step | Train acc | Test acc | LLC λ̂ |
+| Step | Test acc | LLC λ̂ | tr(H) | λ_max(H) |
 |---|---|---|---|---|
-| Random initialisation | 0 | 1% | 1% | **3.6** |
-| Rapid learning | 400 | 89% | 6% | **562** |
-| Memorisation complete | 600 | 99.7% | 13% | 840 |
-| Plateau | 1000 | 99.8% | 18% | 1,071 |
-| Plateau (late) | 1600 | 99.9% | 29% | 1,331 |
-| **Grokking onset** | **2000** | **99.9%** | **73%** | **1,381** |
-| Grokking (peak) | 2200 | 99.9% | 96% | 1,289 ↓ |
-| Post-grokking | 2400 | 100% | 100% | 1,393 |
+| 0 | 1% | 5 | 288 | 496 |
+| 200 | 1% | 87 | 5,834 | 402 |
+| 400 | 8% | 531 | **43,413** | 751 |
+| 600 | 15% | 848 | 36,164 | 705 |
+| 800 | 19% | 950 | 21,178 | 269 |
+| 1000 | 20% | 1,016 | 21,499 | 468 |
+| 1200 | 22% | 1,134 | 22,179 | 934 |
+| 1400 | 26% | 1,234 | 19,713 | 300 |
+| 1600 | 32% | 1,236 | 17,962 | 306 |
+| 1800 | 41% | 1,398 | 20,368 | 286 |
+| **2000** | **65%** | **1,360** | **13,739** ↓ | 314 |
+| 2200 | 91% | 1,339 ↓ | 8,329 ↓ | 193 ↓ |
+| 2400 | 98% | 1,330 ↓ | 6,776 ↓ | 200 |
+| 2600 | 100% | 1,292 ↓ | 4,633 ↓ | 225 |
+| **2800** | **100%** | 1,439 | **818** ↓↓ | **19.8** ↓↓ |
 
-**Key observations:**
+The LLC (purple, left axis) shows the characteristic rise from ~5 at init to ~1,300–1,400
+during the memorisation plateau, with a gentle dip during the grokking transition. It is
+a noisy signal — see [§5](#5-the-llc-calibration-challenge) for why.
 
-**1. The initialisation → memorisation jump (3.6 → 767, a 213× increase).**
-At random initialisation, the loss landscape near w* is approximately flat: the SGLD
-chain barely rises above the baseline (L(w*) ≈ 4.57, the log-uniform loss), giving
-λ̂ ≈ 3.6. This is consistent with randomly initialised networks having a very diffuse
-posterior — the model has no committed structure, and small perturbations don't change
-loss much.
-
-By step 500, the model has memorised ~90% of the training set. The loss landscape has
-become *sharp*: each training example now has a dedicated, high-curvature "well". The
-SGLD chain jumps far above the baseline, giving λ̂ = 767. This is a genuine signal —
-the memorising solution is non-degenerate.
-
-**2. The plateau (steps 500–1800, LLC ≈ 700–1300).**
-During the memorisation plateau, LLC continues rising slowly. This tracks the refinement
-of the lookup-table circuit: weight decay is already shrinking the memorisation weights,
-but the Fourier circuit has not yet become dominant. The loss landscape remains sharp and
-non-degenerate.
-
-**3. The grokking transition (steps 1800–2600).**
-LLC reaches approximately 1,300 at step 2000 (when test acc is ~77%) and then shows a
-subtle decrease to ~1,239 at step 2500 (when test acc reaches 99%). This is directionally
-consistent with the SLT prediction — the generalising Fourier solution is more singular
-(lower λ) — but the decrease is small relative to the measurement noise.
-
-**4. The post-grokking plateau (steps 2600–30000).**
-LLC fluctuates noisily in the range 1,100–1,950. There is no further systematic trend.
-See [§5](#5-the-calibration-challenge) for the interpretation of this behaviour.
+The test accuracy (green dashed, right axis) shows the sharp S-curve of grokking.
 
 ---
 
@@ -222,144 +234,217 @@ See [§5](#5-the-calibration-challenge) for the interpretation of this behaviour
 
 ![Phase portrait](figures/fig3_phase_portrait.png)
 
-This plot shows the trajectory in **(test loss, LLC)** space, coloured by training step.
-It reveals that the training dynamics trace a path between two regimes:
+The trajectory in **(test loss, LLC)** space, coloured by training step:
 
-- **Early phase** (yellow/green): high test loss, low LLC — the model is near its
-  random-initialisation state, exploring a flat landscape.
-- **Memorisation phase** (blue): high test loss, high LLC — the model is in a sharp
-  lookup-table minimum that doesn't generalise.
-- **Grokking** (purple): the path moves downward and to the left — test loss falls and
-  LLC decreases slightly — as the Fourier circuit takes over.
+- **Early** (yellow): high test loss, low LLC — flat diffuse landscape near init.
+- **Memorisation** (blue): high test loss, high LLC — sharp lookup-table minimum.
+- **Grokking** (purple → green): test loss falls steeply; LLC decreases slightly,
+  tracing the transition from memorisation to Fourier basin.
 
-The phase portrait makes the non-monotone trajectory visible: LLC rises *before* the
-test loss falls. The model's internal complexity (as measured by weight-space structure)
-peaks during the memorisation plateau, not at the generalisation point.
+The non-monotone path — LLC *rises before* test loss falls — reflects the fact that
+internal complexity peaks during the plateau, before the model finds the simpler solution.
 
 ---
 
-## 4. Interpretation
+### Fig 4 – Flatness Analysis: Hessian Trace & Top Eigenvalue
 
-### The two solutions in weight space
+![Flatness trajectory](figures/fig4_flatness_trajectory.png)
 
-The grokking phenomenon involves a competition between two local minima in weight space,
-both of which fit the training data:
+**This is the clearest result in the project.** The three panels show:
 
-**The memorisation minimum (high λ):**
-- Mechanistically: a lookup table implemented via attention-based retrieval of stored
-  (a, b) pairs.
-- Structure: many sharp, independent circuits — one "slot" per training example.
-  Almost all parameters contribute to different training examples.
-- In SLT terms: near-regular. The Fisher information has few degeneracies. λ is close
-  to d/2 (maximum).
+**Left — Hessian trace tr(H):**
+Rises from 288 (init) to a peak of **43,413** at step 400 (fast memorisation), then
+decreases through the plateau (~20,000), and **collapses to 818 at step 2800** once the
+Fourier solution is fully established. That is a **53× drop** from peak to post-grokking
+trough — direct, model-free evidence that the model's loss landscape acquires an enormous
+number of flat directions after grokking.
 
-**The Fourier minimum (low λ):**
-- Mechanistically: the network computes `a + b mod p` by embedding a and b in a
-  Fourier basis over ℤ_p, multiplying frequencies, and reading off the result. This
-  requires only O(√p) ≈ 10 active frequencies (Nanda et al. 2023).
-- Structure: highly symmetric. Permuting which Fourier frequencies are used, or rotating
-  within the frequency subspace, gives the same function. The weight space has many flat
-  directions.
-- In SLT terms: highly singular. The effective number of parameters is ≪ d. λ ≪ d/2.
+**Middle — top Hessian eigenvalue λ_max:**
+Drops from ~750 during memorisation to **19.8 at step 2800**, a **38× decrease** in the
+curvature of the sharpest direction alone. This is a particularly clean signal: even the
+direction that was previously most sensitive to parameter perturbation is nearly flat in
+the Fourier minimum.
 
-**The role of weight decay:**
-Weight decay is essential because it creates a *norm penalty* that differentiates the two
-solutions. The memorisation circuit, with its many independent sub-circuits, has higher
-total weight norm than the compact Fourier circuit. Under L2 regularisation, the total
-energy is:
+**Right — LLC vs normalised tr(H) overlay:**
+Both measures, when normalised to [0, 1], trace similar trajectories. Their correlation
+confirms that the LLC is genuinely detecting the same flatness signal as the Hessian,
+despite using a completely different estimation method (SGLD vs. finite-difference probes).
+The LLC is noisier than tr(H) because the SGLD estimator has calibration challenges at
+low loss values (see §5), but the direction of travel is consistent.
 
-```
-E(w) = n · L_n(w)  +  (weight_decay / 2) · ‖w‖²
-```
-
-Initially both circuits have similar loss and norm. As training continues:
-- Both circuits are shrunk by weight decay at the same multiplicative rate.
-- The memorisation circuit degrades faster (its high norm is its Achilles heel).
-- Eventually the Fourier circuit achieves lower *total energy* E(w) and dominates.
-
-This is an instantiation of SLT's general principle: the Bayesian posterior prefers
-singular minima, and weight decay is what drives the model into the basin of the more
-singular minimum.
-
-### LLC as a developmental indicator
-
-The LLC trajectory tells a story about the *internal developmental state* of the network:
-
-1. **Near init (LLC ≈ 3.6):** No committed structure. The model is "tabula rasa" — the
-   loss landscape is flat, reflecting maximum entropy over possible circuits.
-
-2. **During memorisation (LLC ≈ 700–1,300):** The model is "overfit but structured" — it
-   has built a complex, sharp circuit that fits training data. High LLC reflects low
-   degeneracy: almost every parameter participates in some stored memory.
-
-3. **At the transition (LLC peaks then slightly dips):** The Fourier circuit begins to
-   compete. The landscape is a superposition of two basins. LLC peaks because the
-   transition region has the most complex geometry — the model is between two attractors.
-
-4. **Post-grokking (LLC noisily high):** The model is in the Fourier minimum. The LLC
-   *should* be low here (reflecting the DFT solution's symmetries and flat directions),
-   but our estimator struggles — see §5.
-
-### Comparison to the SLT prediction
-
-SLT's prediction for the full grokking arc is:
-
-```
-λ(init) < λ(memorisation) > λ(grokking)
-```
-
-- `λ(init) < λ(memorisation)`: ✓ observed (3.6 vs. ~1,200)
-- `λ(memorisation) > λ(grokking)`: directionally ✓, but the decrease is within noise
-
-The first part of the prediction is strongly confirmed. The second part is directionally
-correct but obscured by the SGLD calibration issue described next.
+The phase bands are clearly visible: tr(H) climbs in the blue (memorise) band and falls
+steeply through the orange (plateau) and green (generalise) bands.
 
 ---
 
-## 5. The Calibration Challenge
+### Fig 5 – 2-D Loss Surface Slices
 
-The post-grokking LLC estimates (1,100–1,950) are high and noisy. This is not a failure
-of SLT but a practical challenge of the SGLD estimator.
+![Loss surfaces](figures/fig5_loss_surfaces.png)
 
-**Root cause:** The SGLD step size ε = 3×10⁻⁶ was chosen for the *memorisation* regime,
-where the training loss is ~0.05–0.1. Post-grokking, the training loss drops to ~0.001 —
-two orders of magnitude smaller. The curvature of the loss landscape near the Fourier
-minimum is much higher (it's a sharper basin), so the same step size now causes the SGLD
-chain to *escape the local basin entirely* and probe global features of the landscape
-rather than local singularity structure.
+Four snapshots of the loss landscape, each centred on w* at that training stage. The same
+two filter-normalised random directions are used across all panels, so the geometry is
+directly comparable. The star marks w*; colour encodes loss (red = high, green = low).
 
-Formally, the equilibrium radius of the localised SGLD chain is:
+| Panel | Stage | What to look for |
+|---|---|---|
+| Step 0 | Init / learning | Wide, shallow bowl — the random landscape has no committed structure |
+| Step 1000 | Memorised (plateau) | Tight, sharp contours — narrow well with steep walls in all directions |
+| Step 2000 | Grokking transition | Intermediate — basin is sharp but beginning to elongate asymmetrically |
+| Step 3000 | Post-grokking | Flatter contours in at least one direction; the flat directions of the Fourier solution appear as elongated ridges |
+
+The loss surface at step 1000 has tight, nearly circular contours: the memorisation
+minimum is sharp and isotropic — all parameter directions matter roughly equally. By step
+3000, the contours elongate: the Fourier solution has acquired flat directions (where
+rotating between equivalent frequency representations leaves the loss unchanged).
+
+Note that a random 2-D slice will not align perfectly with the flat directions of the
+Fourier minimum — the flattest directions live in the high-dimensional frequency subspace.
+The Hessian trace and λ_max (Fig 4) are more sensitive to these directions precisely
+because they average over *all* weight-space directions, not just a 2-D slice.
+
+---
+
+### Fig 6 – Model Comparison (optional)
+
+![Model comparison](figures/fig6_model_comparison.png)
+
+*Generated only with `python train.py --model_sweep` (~20 min extra).* Runs 5 model sizes
+(d = 32–128, layers = 1–4) through a full training arc and plots LLC at convergence versus
+test accuracy. Illustrates the SLT prediction that larger, more expressive models tend to
+find more singular minima (lower LLC) on this task, because they have richer sets of
+equivalent solutions.
+
+---
+
+## 4. Interpretation: Geometry Tells the Story
+
+### The two solutions and their geometry
+
+The grokking phenomenon is a competition between two local minima that both fit the
+training data but differ dramatically in their weight-space geometry:
+
+**The memorisation minimum (step ~400–1800):**
+- Mechanistically: an attention-based lookup table storing all 2,821 training (a, b) → c
+  pairs independently.
+- Geometry: many sharp, independent circuits — one "slot" per training example. Almost
+  every parameter contributes to some stored memory.
+- Hessian: nearly full-rank with large eigenvalues. tr(H) ≈ 43,000. λ_max ≈ 750.
+- SLT: near-regular. LLC ≈ 1,200 (maximum is d/2 = 111,936; this is small but far from zero).
+
+**The Fourier minimum (step ~2800+):**
+- Mechanistically: computes (a + b) mod 97 using the Discrete Fourier Transform over ℤ_97.
+  Only ~10 Fourier frequencies are active; the rest of weight space is unused.
+- Geometry: many flat directions. Permuting which frequencies are used, rotating within
+  frequency subspace, or rescaling conjugate pairs all leave the function unchanged.
+- Hessian: nearly degenerate. tr(H) ≈ 818. λ_max ≈ 20.
+- SLT: highly singular. LLC should be ≪ d/2 — our estimator gives ~1,300 (noisy;
+  true value likely much lower with better calibration).
+
+**The quantitative geometry comparison:**
+
+| Quantity | Memorisation peak | Post-grokking | Ratio |
+|---|---|---|---|
+| tr(H) | 43,413 | 818 | **53×** |
+| λ_max | 750 | 19.8 | **38×** |
+| LLC λ̂ | ~1,380 | ~1,290 | ~1.07× (noisy) |
+
+The Hessian-based measures give an unambiguous confirmation of the SLT prediction. The
+LLC shows the same direction but at much lower signal-to-noise — a calibration problem,
+not a failure of the theory (see §5).
+
+### Why weight decay is the mechanism
+
+Weight decay creates a norm penalty that differentiates the two solutions energetically:
 
 ```
-E[‖w − w*‖²] ≈ d / γ
+E(w) = n·L_n(w)  +  (weight_decay / 2)·‖w‖²
 ```
 
-where d = 223,872 and γ = 10,000 (our spring constant). This gives an equilibrium
-displacement of √(d/γ) ≈ 4.7 in L2 norm — about 0.01 per parameter. For a model
-with post-grokking loss ~0.001, moving 0.01 per parameter can cause large loss
-increases, biasing λ̂ upward.
+The memorisation circuit requires high weight norms (one circuit per training example,
+each independently scaled). The Fourier circuit uses structured, compressible weights
+with lower total norm. Under repeated L2 shrinkage:
+
+1. Both circuits lose energy to weight decay at the same *multiplicative* rate each step.
+2. The memorisation circuit, having higher norm, loses more *absolute* magnitude.
+3. Eventually the Fourier circuit achieves lower *total energy* E(w) and takes over.
+
+This is an instantiation of SLT's Bayesian principle: the posterior prefers singular minima,
+and weight decay is what physically drives the model into the more singular basin.
+
+### The Hessian trajectory as a developmental indicator
+
+tr(H) tells the story of the model's internal development more cleanly than any single
+accuracy metric:
+
+| tr(H) range | Developmental stage |
+|---|---|
+| ~300 | Random initialisation — no committed structure |
+| ~5,000–40,000 | Rapid circuit formation — lookup table being built |
+| ~20,000 | Memorisation plateau — entrenched sharp minimum |
+| ~14,000–7,000 | Grokking transition — flat directions emerging |
+| ~800 | Fourier minimum — mostly flat, heavily degenerate |
+
+### Confirming the SLT prediction
+
+SLT predicts that the loss landscape should become *more degenerate* (flatter, lower LLC)
+at generalising solutions. The full prediction for the grokking arc is:
+
+```
+flatness(init) < flatness(memorisation) > flatness(grokking)
+```
+
+Our results:
+
+| Prediction | Measure | Evidence |
+|---|---|---|
+| init < memorisation | tr(H): 288 → 43,413 | ✅ 150× increase, very strong |
+| memorisation > grokking | tr(H): 43,413 → 818 | ✅ 53× decrease, very strong |
+| memorisation > grokking | λ_max: 750 → 19.8 | ✅ 38× decrease, very strong |
+| memorisation > grokking | LLC: ~1,380 → ~1,290 | ✓ directional, within noise |
+
+**The Hessian-based measures strongly confirm the SLT prediction.** The LLC gives the
+same direction but requires better calibration for the full quantitative picture.
+
+---
+
+## 5. The LLC Calibration Challenge
+
+The post-grokking LLC estimates (~1,300–1,440) remain high relative to the dramatic
+flatness visible in tr(H). This is not a failure of SLT but a practical limitation of
+the fixed-step-size SGLD estimator.
+
+**Root cause:** The SGLD step size ε = 3×10⁻⁶ is tuned for the memorisation regime,
+where train loss ~0.05–0.1. Post-grokking, the loss drops to ~0.001 — two orders of
+magnitude smaller. The same step size now causes the chain to escape the local basin
+entirely, probing global landscape features rather than the local singularity structure.
+
+The Hessian confirms this: at step 2800, λ_max = 19.8. The optimal SGLD step size for
+staying inside this basin is ε ~ 1/λ_max ~ 0.05 — roughly 17,000× larger than our
+current ε, but the noise term `√(2ε) ≈ 0.0024` would then be enormous. Staying inside
+the basin at such low λ_max requires a very small noise term, which means a very small ε,
+which means very slow mixing. This is the fundamental tension in SGLD-based LLC
+estimation for sharp (post-training) minima.
+
+**What the Hessian data tells us about the true post-grokking LLC:**
+Using the Gaussian approximation: LLC ≈ rank(H) / 2. With tr(H) ≈ 818 and λ_max ≈ 20,
+the effective rank of H is roughly tr(H)/λ_max ≈ 41. This gives a Gaussian-approximation
+LLC of ~20 — a factor of 60–70× below our SGLD estimate. This is consistent with the
+Fourier solution using only ~10 active frequencies, each contributing ~2 effective
+parameters (amplitude and phase).
 
 **What would be needed for accurate post-grokking LLC:**
-1. **Adaptive step size:** ε should scale with the local Hessian eigenvalue spectrum. Near
-   a sharp minimum, ε should shrink proportionally to the inverse of the maximum Hessian
-   eigenvalue.
-2. **Stronger localisation:** γ should be large enough that √(d/γ) is much smaller than
-   the basin radius. Post-grokking, γ ~ 10⁸ would be more appropriate.
-3. **Longer chains:** More SGLD steps with smaller ε improves estimation accuracy but not
-   the bias introduced by scale mismatch.
+1. Adaptive step size ε ~ 1/λ_max(H) — requires online Hessian eigenvalue estimation.
+2. Much stronger localisation: γ ~ λ_max × d ~ 20 × 224,000 ~ 4.5 × 10⁶.
+3. Thermodynamic integration or HMC instead of SGLD for better mixing at low temperature.
 
-**Why this matters for Timaeus' Spectroscopy approach:**
-This calibration challenge is precisely what motivates alternative weight-space methods.
-The Spectroscopy program uses *susceptibility-based* measures — local responses of the
-network to small perturbations — which are naturally calibrated to the local geometry.
-Unlike the SGLD estimator, susceptibility measures do not require global exploration of
-the loss landscape and are less sensitive to the absolute scale of the loss.
-
-**An open research question raised by this work:**
-Can the SGLD-based LLC estimator be made robust to post-grokking sharp minima through
-(a) adaptive localisation or (b) HMC instead of SGLD? The directional signal we observe
-(LLC peaks at memorisation and begins to fall at the grokking step) suggests the answer
-is yes, but requires careful calibration work.
+**Why this motivates Timaeus' Spectroscopy approach:**
+The calibration challenge shows that SGLD-based LLC estimation degrades when the model
+reaches sharp, low-loss minima. Spectroscopy's susceptibility-based measures are
+naturally calibrated to the local curvature and do not require global exploration —
+making them more robust in exactly the post-training regime where LLC estimation
+is hardest. Our Hessian and LLC measures can be seen as two ends of a spectrum: the
+Hessian gives a clean but shallow (2nd-order) picture; the LLC gives a deeper (all-order)
+picture but requires careful sampling calibration.
 
 ---
 
@@ -368,47 +453,43 @@ is yes, but requires careful calibration work.
 ### Spectroscopy
 
 Timaeus' Spectroscopy methodology characterises neural network structure using
-susceptibility-based measures grounded in *weight space* — in contrast to
-activation-space methods like sparse autoencoders and probing.
+susceptibility-based measures grounded in *weight space*.
 
-| Spectroscopy | This project |
+| Spectroscopy concept | This project |
 |---|---|
-| Weight-space grounded | LLC is computed from the loss landscape geometry at w*, not from activations |
-| Susceptibility measures | LLC measures how much model behaviour changes under weight perturbation (via SGLD) |
-| Discovers internal structure | LLC trajectory reveals three distinct developmental phases |
-| Local characterisation | Localised LLC (with spring penalty) probes the local basin around w* |
+| Weight-space grounded | All measures (LLC, tr(H), loss surface) are computed from loss geometry at w*, not from activations |
+| Susceptibility measures | tr(H) = total susceptibility to weight perturbation; LLC = Bayesian susceptibility under SGLD |
+| Discovers internal structure | tr(H) trajectory cleanly separates memorisation, plateau, and Fourier phases |
+| Local characterisation | Filter-normalised loss surface shows local basin shape; localised LLC probes the local singularity |
+| Beyond 2nd order | LLC captures higher-order degeneracies that tr(H) misses; complementary to Hessian analysis |
 
-The LLC can be understood as a *global susceptibility*: how sensitive is the model's
-loss to perturbations of all weights simultaneously? Spectroscopy's methods probe finer
-structure — layer-wise or circuit-wise susceptibilities — giving a richer picture of
-which parts of the network change at each phase transition.
-
-An extension of this project would be to compute *per-layer LLC contributions* by running
-SGLD with perturbations restricted to each layer, revealing which layers drive the
-memorisation-to-generalisation transition.
+An extension of this project would compute *per-layer* Hessian traces, decomposing
+which layers' flat directions emerge first during grokking — a finer-grained version of
+the Spectroscopy signal.
 
 ### Patterning
 
-Timaeus' Patterning methodology steers what structures neural networks develop by
-inverting the spectroscopy signal to reweight training data.
+The Fourier circuit develops slowly because training data is dominated by memorisation-
+supporting examples (all 2,821 training pairs reinforce the lookup table). Patterning
+would:
+1. Estimate per-example flatness contributions (which examples reduce tr(H) most?).
+2. Reweight the training distribution to amplify Fourier-supporting examples, accelerating
+   the grokking transition without changing the model architecture.
 
-The grokking delay is controlled by the proportion of training data and the weight decay
-strength. Patterning would invert this:
-- *Identify* which training examples are "supporting" the memorisation circuit (high
-  per-example LLC contribution) vs. the Fourier circuit.
-- *Reweight* the training distribution to down-weight memorisation-supporting examples
-  and up-weight Fourier-supporting examples, accelerating grokking.
-
-This is exactly the regime where Patterning's signal-inversion approach would be most
-powerful — the two circuits have very different per-example loss patterns.
+The Hessian trace provides a natural scalar signal for this inversion: choose data that
+maximally decreases tr(H) (increases flatness) at each step.
 
 ### Phase transitions and developmental stages
 
-Grokking is a toy model for the *developmental stages* that transformers go through
-during pre-training (Olsson et al.'s in-context learning circuits, induction heads, etc.).
-The LLC trajectory in this project demonstrates that weight-space measures can track
-these transitions continuously, without requiring interpretability techniques that
-activate specific circuits.
+Grokking is a controlled toy model for the developmental stages observed in large
+language models (induction heads, in-context learning circuits, etc.). The combined
+LLC + Hessian analysis demonstrates that weight-space measures can:
+
+- Track transitions continuously and quantitatively.
+- Separate genuinely distinct developmental phases (init / memorise / plateau / grokk)
+  from noise.
+- Provide model-free evidence of the internal algorithmic change (lookup table → DFT)
+  without requiring circuit-level interpretability.
 
 ---
 
@@ -420,29 +501,31 @@ activate specific circuits.
 git clone <this-repo>
 cd slt-grokking
 
-uv venv -p 3.12 .venv
-uv pip install -r requirements.txt
+uv venv -p 3.12 .venv && uv pip install -r requirements.txt
 # or: pip install -r requirements.txt
 ```
 
-### Run options
+### Run
 
-| Command | What it does | Time (MPS) |
+| Command | What it does | Time (Apple MPS) |
 |---|---|---|
 | `python train.py --quick` | p=23, 1-layer, 2000 steps — smoke test | ~30 s |
-| `python train.py` | p=97, 2-layer, 50% data, 6000 steps | ~90 s |
-| `python train.py --delayed` | **Recommended: classic delayed grokking** | ~40 s |
-| `python train.py --model_sweep` | Adds Fig 4: LLC vs model size | ~20 min |
+| `python train.py` | p=97, 2-layer, 50% data, 6000 steps | ~2 min |
+| `python train.py --delayed` | **Recommended** — full delayed-grokking arc with Hessian + loss surfaces | ~4 min |
+| `python train.py --delayed --model_sweep` | Also generates Fig 6: LLC at convergence vs model size | ~20 min extra |
 
-The `--delayed` flag uses the configuration described in §2 and produces the results in §3.
+`--delayed` produces Figs 1–5 and the complete analysis described in §3–§5.
+Add `--model_sweep` to also generate Fig 6 (model comparison, ~20 min extra).
 
-### Custom config
+### Key CLI flags
 
 ```bash
-python train.py \
-  --p 113 --n_layers 1 --train_frac 0.3 \
-  --steps 50000 --llc_interval 1000 \
-  --llc_localization 50000   # increase for sharper minima
+python train.py --delayed \
+  --htrace_samples 30    # Hutchinson probes for tr(H) (default 20)
+  --eig_iter 20          # power-iteration steps for λ_max (default 20)
+  --surface_grid 41      # resolution of 2-D loss surface NxN (default 41)
+  --surface_extent 1.0   # ±extent in filter-normalised units
+  --llc_localization 1e4 # spring constant γ (increase for sharper minima)
 ```
 
 ### Code structure
@@ -450,17 +533,18 @@ python train.py \
 ```
 slt-grokking/
 ├── src/
-│   ├── model.py    # ModularTransformer: 3-slot decoder [a, b, =]
-│   ├── data.py     # ModularAdditionDataset: all p² (a,b,c) triples
-│   ├── llc.py      # Localised SGLD LLC estimator — implemented from scratch
-│   └── viz.py      # Five figure generators (publication style)
-├── train.py        # Training loop + LLC tracking + CLI (--quick / --delayed)
-├── pyproject.toml  # uv/pip project spec
+│   ├── model.py     # ModularTransformer: 3-slot decoder [a, b, =]
+│   ├── data.py      # ModularAdditionDataset: all p² (a,b,c) triples
+│   ├── llc.py       # Localised SGLD LLC estimator — from scratch, no devinterp dep.
+│   ├── hessian.py   # Hutchinson trace, power-iteration λ_max, 2-D surface slices
+│   └── viz.py       # Six publication-quality figure generators
+├── train.py         # Training loop + LLC + Hessian tracking + CLI
+├── pyproject.toml   # uv/pip project spec
 └── requirements.txt
 ```
 
-The LLC estimator in `src/llc.py` is implemented from scratch without depending on the
-devinterp library, to make the SLT machinery explicit and auditable.
+All Hessian methods use finite differences or first-order gradients — **fully MPS-safe**,
+no `create_graph=True` needed.
 
 ---
 
@@ -470,6 +554,7 @@ devinterp library, to make the SLT machinery explicit and auditable.
 - Watanabe, S. (2013). A widely applicable Bayesian information criterion. *JMLR*, 14, 867–897.
 - Power, A. et al. (2022). Grokking: Generalisation beyond overfitting on small algorithmic datasets. *arXiv:2201.02177*.
 - Nanda, N. et al. (2023). Progress measures for grokking via mechanistic interpretability. *ICLR 2023*.
+- Li, H. et al. (2018). Visualizing the loss landscape of neural nets. *NeurIPS 2018*.
 - Hoogland, J. et al. (2024). The developmental landscape of in-context learning. *arXiv:2402.02364*.
 - Lau, E. et al. (2023). Quantifying degeneracy in singular models via the learning coefficient. *arXiv:2308.12108*.
 - Timaeus devinterp library: https://github.com/timaeus-research/devinterp

@@ -187,7 +187,7 @@ def plot_phase_portrait(metrics: dict, save_path: str | None = None):
 
 def plot_model_comparison(results: list[dict], save_path: str | None = None):
     """
-    Figure 4: LLC at convergence for different model sizes.
+    Figure 6 (optional, --model_sweep): LLC at convergence for different model sizes.
     Illustrates SLT's prediction: larger models can be more singular (lower λ).
 
     results : list of dicts with keys 'd_model', 'n_layers', 'llc_final', 'test_acc_final'
@@ -214,7 +214,7 @@ def plot_model_comparison(results: list[dict], save_path: str | None = None):
     ax.set_title("Test Accuracy")
 
     plt.tight_layout()
-    _save(fig, save_path, "fig4_model_comparison.png")
+    _save(fig, save_path, "fig6_model_comparison.png")
     return fig
 
 
@@ -292,7 +292,7 @@ def _annotate_phases(ax_main, ax_acc, steps, llcs, accs):
 
 def plot_flatness_trajectory(metrics: dict, save_path: str | None = None):
     """
-    Figure 5: Hessian trace and top eigenvalue alongside LLC.
+    Figure 4: Hessian trace and top eigenvalue alongside LLC.
 
     All three are proxies for loss-surface geometry:
       trace(H) = sum of ALL curvatures  (total sharpness)
@@ -375,13 +375,13 @@ def plot_flatness_trajectory(metrics: dict, save_path: str | None = None):
     _shade(ax)
 
     plt.tight_layout()
-    _save(fig, save_path, "fig5_flatness_trajectory.png")
+    _save(fig, save_path, "fig4_flatness_trajectory.png")
     return fig
 
 
 def plot_loss_surfaces(panels: list[dict], save_path: str | None = None):
     """
-    Figure 6: 2-D loss surface slices at 4 training stages.
+    Figure 5: 2-D loss surface slices at 4 training stages.
 
     Each panel shows L(w* + α·d₁ + β·d₂) on a grid, with the same
     two filter-normalised directions d₁, d₂ used for all panels so
@@ -438,7 +438,7 @@ def plot_loss_surfaces(panels: list[dict], save_path: str | None = None):
     # Single shared colorbar
     cbar = fig.colorbar(im, ax=axes, shrink=0.8, label="Loss L(w)")
     plt.tight_layout()
-    _save(fig, save_path, "fig6_loss_surfaces.png")
+    _save(fig, save_path, "fig5_loss_surfaces.png")
     return fig
 
 

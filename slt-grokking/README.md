@@ -126,8 +126,8 @@ weight space, predicting a lower LLC after the phase transition.
 | Weight decay | 1.0 | Essential: penalises the memorising solution |
 | Optimiser | AdamW, lr = 1e-3 | — |
 | Total parameters | 223,872 | λ_max = d/2 ≈ 112,000 |
-| Total steps | 30,000 | — |
-| LLC interval | every 500 steps | 60 estimates across training |
+| Total steps | 3,000 | Full arc completes by ~step 2,400 |
+| LLC interval | every 200 steps | ~15 estimates across the arc |
 
 With 30% training data and a 1-layer model, the network reliably exhibits **classic
 delayed grokking**: fast memorisation followed by a long plateau before sudden
@@ -178,12 +178,13 @@ high-λ (non-degenerate memorisation) minimum to a low-λ (degenerate Fourier) m
 | Training phase | Step | Train acc | Test acc | LLC λ̂ |
 |---|---|---|---|---|
 | Random initialisation | 0 | 1% | 1% | **3.6** |
-| Early learning | 500 | 90% | 7% | **767** |
-| Memorisation plateau | 1000 | 99.6% | 19% | 1,061 |
-| Plateau (continuing) | 1500 | 99.7% | 26% | 1,295 |
-| Grokking transition | 2000 | 99.9% | 77% | 1,333 |
-| Post-grokking | 2500 | 99.9% | 99% | 1,239 |
-| Long tail | 3000–30000 | 100% | 100% | noisy ~1,100–1,950 |
+| Rapid learning | 400 | 89% | 6% | **562** |
+| Memorisation complete | 600 | 99.7% | 13% | 840 |
+| Plateau | 1000 | 99.8% | 18% | 1,071 |
+| Plateau (late) | 1600 | 99.9% | 29% | 1,331 |
+| **Grokking onset** | **2000** | **99.9%** | **73%** | **1,381** |
+| Grokking (peak) | 2200 | 99.9% | 96% | 1,289 ↓ |
+| Post-grokking | 2400 | 100% | 100% | 1,393 |
 
 **Key observations:**
 
@@ -430,7 +431,7 @@ uv pip install -r requirements.txt
 |---|---|---|
 | `python train.py --quick` | p=23, 1-layer, 2000 steps — smoke test | ~30 s |
 | `python train.py` | p=97, 2-layer, 50% data, 6000 steps | ~90 s |
-| `python train.py --delayed` | **Recommended: classic delayed grokking** | ~4 min |
+| `python train.py --delayed` | **Recommended: classic delayed grokking** | ~40 s |
 | `python train.py --model_sweep` | Adds Fig 4: LLC vs model size | ~20 min |
 
 The `--delayed` flag uses the configuration described in §2 and produces the results in §3.

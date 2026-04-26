@@ -205,9 +205,8 @@ def parse_args():
     p.add_argument("--delayed", action="store_true",
                    help=(
                        "classic delayed-grokking setup (p=97, 1-layer, 30%% train,\n"
-                       "30 000 steps) — shows the memorisation plateau before\n"
-                       "the sudden generalisation jump that SLT predicts.\n"
-                       "~10 min on MPS."
+                       "3 000 steps) — shows the full memorise → plateau → grokk arc.\n"
+                       "~30 s on MPS."
                    ))
     p.add_argument("--p",            type=int,   default=97,    help="prime modulus")
     p.add_argument("--d_model",      type=int,   default=128)
@@ -250,16 +249,16 @@ if __name__ == "__main__":
         # Classic delayed-grokking regime (Power et al. 2022 style):
         #   - 1-layer transformer — simpler, memorises easily but generalises slowly
         #   - 30% train fraction  — less data makes the generalising algorithm harder to find
-        #   - 30 000 steps        — the memorisation plateau lasts thousands of steps
-        #   - LLC estimated every 2000 steps (20 checkpoints total)
+        #   - 3 000 steps covers the full arc: memorise → plateau → grokk (done by ~2 600)
+        #   - LLC every 200 steps → ~15 estimates across the arc
         cfg.p             = 97
         cfg.d_model       = 128
         cfg.n_heads       = 4
         cfg.n_layers      = 1
         cfg.train_frac    = 0.30
-        cfg.steps         = 30_000
-        cfg.eval_interval = 200
-        cfg.llc_interval  = 500        # fine enough to see the transition
+        cfg.steps         = 3_000
+        cfg.eval_interval = 100
+        cfg.llc_interval  = 200
         cfg.llc_steps     = 200
         cfg.llc_burnin    = 50
 

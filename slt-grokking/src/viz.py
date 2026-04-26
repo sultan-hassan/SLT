@@ -290,6 +290,158 @@ def _annotate_phases(ax_main, ax_acc, steps, llcs, accs):
                      fontsize=8, color="#1B5E20", style="italic")
 
 
+def plot_flatness_trajectory(metrics: dict, save_path: str | None = None):
+    """
+    Figure 5: Hessian trace and top eigenvalue alongside LLC.
+
+    All three are proxies for loss-surface geometry:
+      trace(H) = sum of ALL curvatures  (total sharpness)
+      λ_max(H) = sharpest single direction
+      LLC λ̂   = effective singular dimension (SLT)
+
+    SLT prediction: all three should rise during memorisation and
+    decrease (or stabilise) after grokking as the Fourier solution's
+    flat directions become dominant.
+    """
+    _apply_style()
+    steps      = np.array(metrics["llc_steps"])
+    llcs       = np.array(metrics["llc"])
+    htraces    = np.array(metrics["htrace"])
+    lambda_max = np.array(metrics["lambda_max"])
+
+    eval_steps = np.array(metrics["eval_steps"])
+    test_acc   = np.array(metrics["test_acc"])
+    acc_at_llc = np.interp(steps, eval_steps, test_acc)
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    fig.suptitle(
+        "Loss-Surface Flatness During Training\n"
+        "Flatness = more zero/near-zero Hessian eigenvalues = lower LLC (SLT)",
+        fontsize=12, fontweight="bold",
+    )
+
+    def _shade(ax, ymax_scale=1.0):
+        """Draw memorisation/grokking phase bands."""
+        memo_c = np.where(acc_at_llc > 0.95)[0]
+        grokk_c = np.where(acc_at_llc > 0.50)[0]
+        xmax = steps[-1]
+        memo_step  = int(steps[memo_c[0]])  if len(memo_c)  else None
+        grokk_step = int(steps[grokk_c[0]]) if len(grokk_c) else None
+        if memo_step:
+            ax.axvspan(0, memo_step, alpha=0.07, color="#2196F3", zorder=0)
+        if memo_step and grokk_step and grokk_step > memo_step:
+            ax.axvspan(memo_step, grokk_step, alpha=0.07, color="#FF9800", zorder=0)
+        if grokk_step:
+            ax.axvspan(grokk_step, xmax, alpha=0.07, color="#4CAF50", zorder=0)
+
+    # Panel 1: Hessian trace
+    ax = axes[0]
+    ax.plot(steps, htraces, color="#E91E63", lw=2, marker="o", ms=4)
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("trace(H) — total curvature")
+    ax.set_title("Hessian Trace  tr(H) = Σᵢ λᵢ")
+    _shade(ax)
+
+    # Panel 2: Top eigenvalue
+    ax = axes[1]
+    ax.plot(steps, lambda_max, color="#FF5722", lw=2, marker="o", ms=4)
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("λ_max(H) — sharpest direction")
+    ax.set_title("Top Hessian Eigenvalue  λ_max")
+    _shade(ax)
+
+    # Panel 3: LLC alongside normalised trace for comparison
+    ax = axes[2]
+    color_llc   = "#9C27B0"
+    color_trace = "#E91E63"
+    ax2 = ax.twinx()
+
+    # Normalise both to [0,1] for visual overlay
+    llc_n   = (llcs  - llcs.min())  / (llcs.max()  - llcs.min()  + 1e-9)
+    trace_n = (htraces - htraces.min()) / (htraces.max() - htraces.min() + 1e-9)
+
+    ax.plot(steps, llc_n,   color=color_llc,   lw=2, label="LLC λ̂ (norm.)")
+    ax2.plot(steps, trace_n, color=color_trace, lw=2, ls="--", label="tr(H) (norm.)")
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("Normalised LLC", color=color_llc)
+    ax2.set_ylabel("Normalised tr(H)", color=color_trace)
+    ax.tick_params(axis="y", labelcolor=color_llc)
+    ax2.tick_params(axis="y", labelcolor=color_trace)
+    ax2.spines["right"].set_visible(True)
+    ax.set_title("LLC vs Hessian Trace (both normalised)")
+    lines1, l1 = ax.get_legend_handles_labels()
+    lines2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, l1 + l2, fontsize=9)
+    _shade(ax)
+
+    plt.tight_layout()
+    _save(fig, save_path, "fig5_flatness_trajectory.png")
+    return fig
+
+
+def plot_loss_surfaces(panels: list[dict], save_path: str | None = None):
+    """
+    Figure 6: 2-D loss surface slices at 4 training stages.
+
+    Each panel shows L(w* + α·d₁ + β·d₂) on a grid, with the same
+    two filter-normalised directions d₁, d₂ used for all panels so
+    the geometry is directly comparable.
+
+    Colour scale is shared across all panels so sharpness is visible.
+
+    panels : list of dicts with keys 'step', 'test_acc', 'Z', 'alphas', 'betas'
+    """
+    _apply_style()
+    n = len(panels)
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 4))
+    if n == 1:
+        axes = [axes]
+    fig.suptitle(
+        "2-D Loss Surface Slices at Four Training Stages\n"
+        "Same weight-space directions used across all panels (filter-normalised)",
+        fontsize=12, fontweight="bold",
+    )
+
+    # Shared colour scale: clip at 95th percentile to avoid outliers dominating
+    all_Z = np.concatenate([p["Z"].ravel() for p in panels])
+    vmin, vmax = np.percentile(all_Z, 2), np.percentile(all_Z, 95)
+
+    for ax, panel in zip(axes, panels):
+        Z = panel["Z"]
+        alphas = panel["alphas"]
+        betas  = panel["betas"]
+        step   = panel["step"]
+        acc    = panel["test_acc"]
+
+        im = ax.contourf(alphas, betas, Z.T,
+                         levels=30, cmap="RdYlGn_r",
+                         vmin=vmin, vmax=vmax)
+        ax.contour(alphas, betas, Z.T,
+                   levels=15, colors="white", linewidths=0.4, alpha=0.5)
+        ax.plot(0, 0, "w*", ms=10, zorder=5, label="w*")  # mark the minimum
+        ax.set_xlabel("α  (direction d₁)")
+        ax.set_ylabel("β  (direction d₂)")
+
+        # Infer phase label from test accuracy
+        if acc < 0.10:
+            phase = "Init / learning"
+        elif acc < 0.40:
+            phase = "Memorised (plateau)"
+        elif acc < 0.90:
+            phase = "Grokking transition"
+        else:
+            phase = "Post-grokking"
+
+        ax.set_title(f"Step {step}\n{phase}  (test {acc:.0%})", fontsize=10)
+        ax.set_aspect("equal")
+
+    # Single shared colorbar
+    cbar = fig.colorbar(im, ax=axes, shrink=0.8, label="Loss L(w)")
+    plt.tight_layout()
+    _save(fig, save_path, "fig6_loss_surfaces.png")
+    return fig
+
+
 def _save(fig, save_path, name):
     if save_path is not None:
         p = Path(save_path)

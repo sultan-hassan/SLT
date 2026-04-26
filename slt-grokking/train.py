@@ -22,12 +22,15 @@ import torch.nn as nn
 from src.model import ModularTransformer, count_params
 from src.data import make_dataloaders
 from src.llc import estimate_llc
+from src.hessian import hessian_trace, top_eigenvalue, loss_surface_2d
 from src.viz import (
     plot_training_dynamics,
     plot_llc_trajectory,
     plot_phase_portrait,
     plot_model_comparison,
     plot_sgld_diagnostics,
+    plot_flatness_trajectory,
+    plot_loss_surfaces,
 )
 
 
@@ -85,14 +88,33 @@ def train(cfg):
     criterion = nn.CrossEntropyLoss()
 
     metrics = {
-        "eval_steps":  [],
-        "train_loss":  [], "test_loss":  [],
-        "train_acc":   [], "test_acc":   [],
-        "llc_steps":   [],
-        "llc":         [],
+        "eval_steps":   [],
+        "train_loss":   [], "test_loss":   [],
+        "train_acc":    [], "test_acc":    [],
+        "llc_steps":    [],
+        "llc":          [],
+        "htrace":       [],   # Hessian trace  (∑ eigenvalues = total curvature)
+        "lambda_max":   [],   # largest Hessian eigenvalue (sharpest direction)
     }
 
     figures_dir = Path("figures")
+    figures_dir.mkdir(exist_ok=True)
+
+    # Shared random directions for loss surface panels (fixed seed → comparable plots)
+    torch.manual_seed(99)
+    _d = count_params(model)
+    _surf_dir1 = torch.randn(_d)
+    _surf_dir2 = torch.randn(_d)
+
+    # Checkpoints saved for loss surface visualisation
+    # Keys: training step → (state_dict, test_acc at that step)
+    surface_ckpts: dict[int, dict] = {}
+    # Save at 4 evenly-spaced steps across the run
+    save_at = {0,
+               cfg.steps // 3,
+               2 * cfg.steps // 3,
+               cfg.steps}
+
     train_iter = _cycle(train_loader)
     t0 = time.time()
 
@@ -110,9 +132,9 @@ def train(cfg):
             print(f"step {step:>5d} | train {tr_loss:.3f}/{tr_acc:.2%} | "
                   f"test {te_loss:.3f}/{te_acc:.2%} | {elapsed:.0f}s")
 
-        # ── LLC estimation ────────────────────────────────────────────────────
+        # ── LLC + Hessian estimation ──────────────────────────────────────────
         if step % cfg.llc_interval == 0:
-            print(f"  → estimating LLC at step {step} ...", end="", flush=True)
+            print(f"  → step {step}: LLC ...", end="", flush=True)
             llc, energies = estimate_llc(
                 model, criterion, train_loader,
                 n_steps=cfg.llc_steps, step_size=cfg.llc_step_size,
@@ -121,11 +143,30 @@ def train(cfg):
             )
             metrics["llc_steps"].append(step)
             metrics["llc"].append(llc)
-            print(f"  λ̂ = {llc:.4f}")
+            print(f"  λ̂={llc:.1f}", end="", flush=True)
 
-            # Save SGLD diagnostics for a few checkpoints
+            print(f"  | Hessian ...", end="", flush=True)
+            ht = hessian_trace(model, criterion, train_loader,
+                               n_samples=cfg.htrace_samples,
+                               delta=cfg.htrace_delta, device=device)
+            lm = top_eigenvalue(model, criterion, train_loader,
+                                n_iter=cfg.eig_iter,
+                                delta=cfg.htrace_delta, device=device)
+            metrics["htrace"].append(ht)
+            metrics["lambda_max"].append(lm)
+            print(f"  tr(H)={ht:.1f}  λ_max={lm:.2f}")
+
             if step in {0, cfg.steps // 4, cfg.steps // 2, cfg.steps}:
                 plot_sgld_diagnostics(energies, llc, step, save_path=str(figures_dir))
+
+        # ── Checkpoint for loss surface ───────────────────────────────────────
+        if step in save_at:
+            # record test acc at this step (interpolate from last eval)
+            te_acc_now = metrics["test_acc"][-1] if metrics["test_acc"] else 0.0
+            surface_ckpts[step] = {
+                "state": {k: v.cpu() for k, v in model.state_dict().items()},
+                "test_acc": te_acc_now,
+            }
 
         if step == cfg.steps:
             break
@@ -142,7 +183,6 @@ def train(cfg):
         optimizer.step()
 
     # ── Save metrics ──────────────────────────────────────────────────────────
-    figures_dir.mkdir(exist_ok=True)
     with open(figures_dir / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
 
@@ -151,6 +191,34 @@ def train(cfg):
     plot_training_dynamics(metrics, save_path=str(figures_dir))
     plot_llc_trajectory(metrics,    save_path=str(figures_dir))
     plot_phase_portrait(metrics,    save_path=str(figures_dir))
+
+    # ── Figure 5: Hessian flatness alongside LLC ──────────────────────────────
+    if metrics["htrace"]:
+        plot_flatness_trajectory(metrics, save_path=str(figures_dir))
+
+    # ── Figure 6: 2-D loss surface at 4 training stages ──────────────────────
+    if surface_ckpts:
+        print("  Computing loss surfaces (this takes ~30 s) ...", flush=True)
+        panels = []
+        for step_key in sorted(surface_ckpts):
+            info = surface_ckpts[step_key]
+            model.load_state_dict({k: v.to(device) for k, v in info["state"].items()})
+            Z, alphas, betas = loss_surface_2d(
+                model, criterion, train_loader,
+                dir1=_surf_dir1.clone(), dir2=_surf_dir2.clone(),
+                grid_size=cfg.surface_grid, extent=cfg.surface_extent,
+                device=device, seed=99,
+            )
+            panels.append({
+                "step": step_key,
+                "test_acc": info["test_acc"],
+                "Z": Z, "alphas": alphas, "betas": betas,
+            })
+        # Restore final weights
+        model.load_state_dict(
+            {k: v.to(device) for k, v in surface_ckpts[cfg.steps]["state"].items()}
+        )
+        plot_loss_surfaces(panels, save_path=str(figures_dir))
 
     # ── Figure 4: model comparison ────────────────────────────────────────────
     if cfg.model_sweep:
@@ -226,6 +294,18 @@ def parse_args():
     p.add_argument("--llc_burnin",       type=int,   default=50)
     p.add_argument("--llc_localization", type=float, default=10_000.0,
                    help="spring constant keeping SGLD near w* (0=global, >0=localised)")
+    # Hessian / flatness options
+    p.add_argument("--htrace_samples", type=int,   default=20,
+                   help="Hutchinson samples for trace(H) estimate")
+    p.add_argument("--htrace_delta",   type=float, default=1e-3,
+                   help="finite-difference step for Hessian estimates")
+    p.add_argument("--eig_iter",       type=int,   default=20,
+                   help="power-iteration steps for top Hessian eigenvalue")
+    # Loss surface options
+    p.add_argument("--surface_grid",   type=int,   default=41,
+                   help="grid resolution for 2-D loss surface (NxN points)")
+    p.add_argument("--surface_extent", type=float, default=1.0,
+                   help="±extent of the loss surface grid (filter-normalised units)")
     p.add_argument("--model_sweep",  action="store_true",
                    help="also run Figure 4 model comparison sweep")
     p.add_argument("--seed",         type=int,   default=42)

@@ -169,16 +169,31 @@ def plot_phase_portrait(metrics: dict, save_path: str | None = None):
     ax.set_xlabel("Test loss")
     ax.set_ylabel("LLC λ̂")
 
-    # Annotate phases
+    # Annotate the three distinct clusters in (test_loss, LLC) space.
+    # • Init/learning:         (high loss, low  LLC) — bottom-right
+    # • Memorisation plateau:  (high loss, high LLC) — top-right
+    # • Post-grokking:         (low  loss, high LLC) — top-left
+    # Note: LLC does NOT drop after grokking (calibration issue — see §5).
+    # The Hessian trace / λ_max are the clean flatness signal.
     if len(llcs) > 4:
-        early = len(llcs) // 6
-        late  = -len(llcs) // 6
-        ax.annotate("Memorisation\n(high λ, poor test)", xy=(loss_at_llc[early], llcs[early]),
-                    xytext=(0.5, 0.85), textcoords="axes fraction",
+        # Memorisation plateau: pick a point well inside the high-loss, high-LLC cluster
+        # (roughly the middle third of the trajectory)
+        memo_idx  = max(1, len(llcs) // 3)      # ~step 1000, LLC≈1020, loss≈4.7
+        # Post-grokking: last point (loss≈0, LLC still high)
+        post_idx  = len(llcs) - 1
+
+        ax.annotate("Memorisation plateau\n(high loss, λ ≈ 800–1400)",
+                    xy=(loss_at_llc[memo_idx], llcs[memo_idx]),
+                    xytext=(0.60, 0.25), textcoords="axes fraction",
                     arrowprops=dict(arrowstyle="->", color="red"), color="red", fontsize=9)
-        ax.annotate("Generalisation\n(low λ, good test)", xy=(loss_at_llc[late], llcs[late]),
-                    xytext=(0.15, 0.15), textcoords="axes fraction",
+        ax.annotate("Post-grokking\n(loss → 0, λ stays high*)",
+                    xy=(loss_at_llc[post_idx], llcs[post_idx]),
+                    xytext=(0.30, 0.60), textcoords="axes fraction",
                     arrowprops=dict(arrowstyle="->", color="green"), color="green", fontsize=9)
+        ax.text(0.98, 0.03, "* LLC stays high: calibration issue (§5).\n"
+                "  True post-grokking λ ≈ 20 from Hessian.",
+                transform=ax.transAxes, ha="right", va="bottom",
+                fontsize=7.5, style="italic", color="#555555")
 
     plt.tight_layout()
     _save(fig, save_path, "fig3_phase_portrait.png")
@@ -255,9 +270,10 @@ def _annotate_phases(ax_main, ax_acc, steps, llcs, accs):
     steps = np.array(steps)
     accs  = np.array(accs)
 
-    # Memorisation: first step where train-side is high but test is still low
-    # We infer from the LLC jump: find where LLC first exceeds 10% of its max
-    llc_threshold = 0.10 * llcs.max()
+    # Memorisation plateau begins when LLC has risen past 50% of its maximum.
+    # (Using 10% placed the boundary too early, in the fast-learning phase before
+    # train accuracy reaches 100% and the lookup-table circuit is entrenched.)
+    llc_threshold = 0.50 * llcs.max()
     memo_candidates = np.where(llcs > llc_threshold)[0]
     memo_step = int(steps[memo_candidates[0]]) if len(memo_candidates) else None
 
@@ -266,27 +282,26 @@ def _annotate_phases(ax_main, ax_acc, steps, llcs, accs):
     grokk_step = int(steps[grokk_candidates[0]]) if len(grokk_candidates) else None
 
     xmax = steps[-1]
-    ymin, ymax = ax_main.get_ylim() if ax_main.get_ylim() != (0, 1) else (0, llcs.max() * 1.1)
 
     phase_alpha = 0.08
     if memo_step is not None:
         ax_main.axvspan(0, memo_step, alpha=phase_alpha, color="#2196F3", zorder=0)
         ax_main.text(memo_step * 0.45, llcs.max() * 0.95,
-                     "Memorisation", ha="center", va="top",
+                     "Memorising", ha="center", va="top",
                      fontsize=8, color="#1565C0", style="italic")
 
     if memo_step is not None and grokk_step is not None and grokk_step > memo_step:
         ax_main.axvspan(memo_step, grokk_step, alpha=phase_alpha, color="#FF9800", zorder=0)
         mid = (memo_step + grokk_step) / 2
         ax_main.text(mid, llcs.max() * 0.95,
-                     "Plateau", ha="center", va="top",
+                     "Memorisation plateau", ha="center", va="top",
                      fontsize=8, color="#E65100", style="italic")
 
     if grokk_step is not None:
         ax_main.axvspan(grokk_step, xmax, alpha=phase_alpha, color="#4CAF50", zorder=0)
         mid = (grokk_step + xmax) / 2
         ax_main.text(mid, llcs.max() * 0.95,
-                     "Generalisation", ha="center", va="top",
+                     "Grokking", ha="center", va="top",
                      fontsize=8, color="#1B5E20", style="italic")
 
 
@@ -321,8 +336,11 @@ def plot_flatness_trajectory(metrics: dict, save_path: str | None = None):
     )
 
     def _shade(ax, ymax_scale=1.0):
-        """Draw memorisation/grokking phase bands."""
-        memo_c = np.where(acc_at_llc > 0.95)[0]
+        """Draw memorisation/grokking phase bands (consistent with _annotate_phases)."""
+        # Use LLC > 50% of max for memorisation plateau start (same threshold as
+        # _annotate_phases), and test_acc > 50% for grokking onset.
+        llc_max = llcs.max()
+        memo_c  = np.where(llcs > 0.50 * llc_max)[0]
         grokk_c = np.where(acc_at_llc > 0.50)[0]
         xmax = steps[-1]
         memo_step  = int(steps[memo_c[0]])  if len(memo_c)  else None

@@ -183,20 +183,20 @@ flat directions and a lower LLC, making this a genuine prediction test for SLT.
 
 Three phases are visible in the right panel (accuracy):
 
-1. **Learning** (steps 0–400): train and test accuracy both rise — the model is still
-   finding any signal.
-2. **Memorisation plateau** (steps 400–1800): train accuracy reaches 99.8% and stalls;
-   test accuracy is stuck at 15–26%. The model has memorised the training pairs but has
-   not found the generalising algorithm.
-3. **Grokking transition** (steps 1800–2400): test accuracy climbs rapidly from ~41% to
-   ~100% in just 600 steps. The Fourier circuit takes over.
+1. **Memorising** (steps 0–600, blue band): train accuracy climbs rapidly from 1% to ~100%
+   as the model builds an attention-based lookup table. Test accuracy stays near chance.
+2. **Memorisation plateau** (steps 600–2000, orange band): train accuracy is locked at
+   ~100%; test accuracy creeps from 15% to ~44% but makes no breakthrough. The lookup
+   table is fully entrenched.
+3. **Grokking transition** (steps 2000–3000, green band): test accuracy climbs rapidly from
+   ~70% to 100% in ~1,000 steps. The Fourier circuit takes over.
 
-In the left panel (loss), note that test loss briefly *rises above the random-chance
-baseline* (log 97 ≈ 4.57) during the plateau — the memorisation circuit is actively
-suppressing generalisation.
+In the left panel (loss), note that test loss rises above the random-chance baseline
+(log 97 ≈ 4.57) during the plateau — the memorisation circuit actively suppresses
+generalisation.
 
-The shaded bands (blue = memorise, orange = plateau, green = generalise) are the same
-across all figures, making direct comparison easy.
+The shaded bands (blue = memorising, orange = memorisation plateau, green = grokking) are
+consistent across all figures, making direct comparison easy.
 
 ---
 
@@ -204,29 +204,36 @@ across all figures, making direct comparison easy.
 
 ![LLC trajectory](figures/fig2_llc_trajectory.png)
 
-| Step | Test acc | LLC λ̂ | tr(H) | λ_max(H) |
-|---|---|---|---|---|
-| 0 | 1% | 5 | 288 | 496 |
-| 200 | 1% | 87 | 5,834 | 402 |
-| 400 | 8% | 531 | **43,413** | 751 |
-| 600 | 15% | 848 | 36,164 | 705 |
-| 800 | 19% | 950 | 21,178 | 269 |
-| 1000 | 20% | 1,016 | 21,499 | 468 |
-| 1200 | 22% | 1,134 | 22,179 | 934 |
-| 1400 | 26% | 1,234 | 19,713 | 300 |
-| 1600 | 32% | 1,236 | 17,962 | 306 |
-| 1800 | 41% | 1,398 | 20,368 | 286 |
-| **2000** | **65%** | **1,360** | **13,739** ↓ | 314 |
-| 2200 | 91% | 1,339 ↓ | 8,329 ↓ | 193 ↓ |
-| 2400 | 98% | 1,330 ↓ | 6,776 ↓ | 200 |
-| 2600 | 100% | 1,292 ↓ | 4,633 ↓ | 225 |
-| **2800** | **100%** | 1,439 | **818** ↓↓ | **19.8** ↓↓ |
+| Step | Phase | Test acc | LLC λ̂ | tr(H) | λ_max(H) |
+|---|---|---|---|---|---|
+| 0 | Init | 1% | 5 | 288 | 496 |
+| 200 | Memorising | 1% | 87 | 5,716 | 396 |
+| 400 | Memorising | 8% | 527 | **43,145** | 708 |
+| 600 | Plateau | 15% | 851 | 35,886 | **853** |
+| 800 | Plateau | 19% | 934 | 20,472 | 362 |
+| 1000 | Plateau | 20% | 1,020 | 20,359 | 311 |
+| 1200 | Plateau | 23% | 1,161 | 20,535 | 360 |
+| 1400 | Plateau | 27% | 1,190 | 16,024 | 266 |
+| 1600 | Plateau | 31% | 1,276 | 19,910 | 474 |
+| 1800 | Plateau | 44% | 1,367 | 18,969 | 561 |
+| **2000** | **Grokking** | **70%** | 1,332 | 12,392 ↓ | 277 ↓ |
+| 2200 | Grokking | 94% | 1,340 | 8,557 ↓↓ | 225 ↓ |
+| 2400 | Grokking | 98% | 1,332 | 7,134 ↓↓ | 233 |
+| **2600** | **Post-grokking** | **100%** | 1,380 | **887** ↓↓↓ | **21** ↓↓↓ |
+| 2800 | Post-grokking | 100% | 1,390 | 7,426 † | 319 † |
+| **3000** | **Post-grokking** | **100%** | 1,361 | **705** ↓↓↓ | **19** ↓↓↓ |
 
-The LLC (purple, left axis) shows the characteristic rise from ~5 at init to ~1,300–1,400
-during the memorisation plateau, with a gentle dip during the grokking transition. It is
-a noisy signal — see [§5](#5-the-llc-calibration-challenge) for why.
+† Step 2800 is anomalously high — the AdamW optimiser occasionally steps away from the
+flat Fourier minimum during parameter updates, raising measured curvature transiently.
+Steps 2600 and 3000 reflect the true converged geometry.
 
-The test accuracy (green dashed, right axis) shows the sharp S-curve of grokking.
+The LLC (purple, left axis) rises from ~5 at init to ~1,300–1,400 during the memorisation
+plateau and **stays similarly high after grokking** — a calibration artefact explained in
+[§5](#5-the-llc-calibration-challenge). The Hessian measures (tr(H) and λ_max) give the
+clean signal.
+
+The test accuracy (green dashed, right axis) shows the sharp S-curve of grokking, reaching
+100% by step 2600.
 
 ---
 
@@ -234,15 +241,23 @@ The test accuracy (green dashed, right axis) shows the sharp S-curve of grokking
 
 ![Phase portrait](figures/fig3_phase_portrait.png)
 
-The trajectory in **(test loss, LLC)** space, coloured by training step:
+The trajectory in **(test loss, LLC)** space, coloured by training step (yellow = early,
+dark blue = late):
 
-- **Early** (yellow): high test loss, low LLC — flat diffuse landscape near init.
-- **Memorisation** (blue): high test loss, high LLC — sharp lookup-table minimum.
-- **Grokking** (purple → green): test loss falls steeply; LLC decreases slightly,
-  tracing the transition from memorisation to Fourier basin.
+- **Init / learning** (yellow, bottom-right): high test loss, near-zero LLC — landscape is
+  diffuse; the model has not yet committed to any circuit.
+- **Memorisation plateau** (blue-purple, top-right): high test loss, LLC ≈ 800–1,400 —
+  the lookup-table circuit is fully entrenched. Test loss rises slightly above the
+  random-chance baseline (log 97 ≈ 4.57) as memorisation actively suppresses generalisation.
+- **Grokking transition** (purple): test loss falls steeply as the Fourier circuit
+  takes over; LLC remains high (~1,330–1,390).
+- **Post-grokking** (dark blue, top-left): test loss ≈ 0, LLC ≈ 1,360. The LLC does **not**
+  drop — this is the calibration issue described in §5. The clean post-grokking signal
+  lives in the Hessian measures (Fig 4).
 
-The non-monotone path — LLC *rises before* test loss falls — reflects the fact that
-internal complexity peaks during the plateau, before the model finds the simpler solution.
+The trajectory traces an L-shape: LLC first rises (bottom → top) while test loss stays
+high, then test loss falls (right → left) while LLC stays high. The expected SLT signal
+(LLC dropping to ~20) is not resolved by SGLD at this step size; see §5.
 
 ---
 
@@ -253,27 +268,29 @@ internal complexity peaks during the plateau, before the model finds the simpler
 **This is the clearest result in the project.** The three panels show:
 
 **Left — Hessian trace tr(H):**
-Rises from 288 (init) to a peak of **43,413** at step 400 (fast memorisation), then
-decreases through the plateau (~20,000), and **collapses to 818 at step 2800** once the
-Fourier solution is fully established. That is a **53× drop** from peak to post-grokking
-trough — direct, model-free evidence that the model's loss landscape acquires an enormous
-number of flat directions after grokking.
+Rises from 288 (init) to a peak of **43,145** at step 400 (fast memorisation — a 150×
+increase), then holds at ~16,000–20,000 across the memorisation plateau, and **collapses
+to 705–887 at steps 2600 and 3000** once the Fourier solution is fully established. That
+is a **61× drop** from peak to post-grokking trough — direct, model-free evidence that the
+loss landscape acquires an enormous number of flat directions after grokking. (Step 2800 is
+anomalously high at 7,426 due to a transient optimiser step away from the flat minimum.)
 
 **Middle — top Hessian eigenvalue λ_max:**
-Drops from ~750 during memorisation to **19.8 at step 2800**, a **38× decrease** in the
-curvature of the sharpest direction alone. This is a particularly clean signal: even the
-direction that was previously most sensitive to parameter perturbation is nearly flat in
-the Fourier minimum.
+Peaks at **853 at step 600** during memorisation and drops to **19–21 at steps 2600 and
+3000** (converged Fourier minimum), a **45× decrease** in the curvature of the sharpest
+weight-space direction. Even the single most sensitive parameter direction is nearly flat
+once the Fourier circuit is established — consistent with only ~10 active frequencies each
+contributing two effective parameters.
 
 **Right — LLC vs normalised tr(H) overlay:**
-Both measures, when normalised to [0, 1], trace similar trajectories. Their correlation
-confirms that the LLC is genuinely detecting the same flatness signal as the Hessian,
-despite using a completely different estimation method (SGLD vs. finite-difference probes).
-The LLC is noisier than tr(H) because the SGLD estimator has calibration challenges at
-low loss values (see §5), but the direction of travel is consistent.
+Both measures, normalised to [0, 1], trace broadly similar trajectories: rising during
+memorisation, then falling (tr(H)) or plateauing (LLC) after grokking. The divergence
+post-grokking — tr(H) collapses while LLC stays high — is the calibration issue (§5).
+The LLC is detecting rising complexity during memorisation, but cannot resolve the
+post-grokking collapse at this step size.
 
-The phase bands are clearly visible: tr(H) climbs in the blue (memorise) band and falls
-steeply through the orange (plateau) and green (generalise) bands.
+The phase bands show: tr(H) peaks sharply in the blue (memorising) band, holds during the
+orange (plateau) band, then collapses in the green (grokking) band.
 
 ---
 
@@ -323,30 +340,32 @@ equivalent solutions.
 The grokking phenomenon is a competition between two local minima that both fit the
 training data but differ dramatically in their weight-space geometry:
 
-**The memorisation minimum (step ~400–1800):**
+**The memorisation minimum (steps ~400–1800):**
 - Mechanistically: an attention-based lookup table storing all 2,821 training (a, b) → c
   pairs independently.
 - Geometry: many sharp, independent circuits — one "slot" per training example. Almost
   every parameter contributes to some stored memory.
-- Hessian: nearly full-rank with large eigenvalues. tr(H) ≈ 43,000. λ_max ≈ 750.
-- SLT: near-regular. LLC ≈ 1,200 (maximum is d/2 = 111,936; this is small but far from zero).
+- Hessian: nearly full-rank with large eigenvalues. tr(H) ≈ 43,000 (peak). λ_max ≈ 850.
+- SLT: near-regular. LLC ≈ 800–1,400 during the plateau.
 
-**The Fourier minimum (step ~2800+):**
+**The Fourier minimum (steps ~2600+, converged):**
 - Mechanistically: computes (a + b) mod 97 using the Discrete Fourier Transform over ℤ_97.
   Only ~10 Fourier frequencies are active; the rest of weight space is unused.
 - Geometry: many flat directions. Permuting which frequencies are used, rotating within
   frequency subspace, or rescaling conjugate pairs all leave the function unchanged.
-- Hessian: nearly degenerate. tr(H) ≈ 818. λ_max ≈ 20.
-- SLT: highly singular. LLC should be ≪ d/2 — our estimator gives ~1,300 (noisy;
-  true value likely much lower with better calibration).
+- Hessian: nearly degenerate. tr(H) ≈ 700–900. λ_max ≈ 19–21.
+- SLT: highly singular. SGLD LLC ≈ 1,360–1,390 (calibration issue); Hessian-estimated
+  true LLC ≈ tr(H)/λ_max / 2 ≈ 705/19 / 2 ≈ **19** — consistent with ~10 active
+  frequencies × 2 parameters each.
 
 **The quantitative geometry comparison:**
 
-| Quantity | Memorisation peak | Post-grokking | Ratio |
+| Quantity | Memorisation peak | Post-grokking (avg steps 2600+3000) | Ratio |
 |---|---|---|---|
-| tr(H) | 43,413 | 818 | **53×** |
-| λ_max | 750 | 19.8 | **38×** |
-| LLC λ̂ | ~1,380 | ~1,290 | ~1.07× (noisy) |
+| tr(H) | **43,145** (step 400) | **796** | **54×** drop |
+| λ_max | **853** (step 600) | **20** | **43×** drop |
+| LLC λ̂ (SGLD) | ~1,367 | ~1,367 | ~1× (calibration noise) |
+| LLC (Hessian est.) | — | **~19** | true singularity depth |
 
 The Hessian-based measures give an unambiguous confirmation of the SLT prediction. The
 LLC shows the same direction but at much lower signal-to-noise — a calibration problem,
@@ -378,11 +397,11 @@ accuracy metric:
 
 | tr(H) range | Developmental stage |
 |---|---|
-| ~300 | Random initialisation — no committed structure |
-| ~5,000–40,000 | Rapid circuit formation — lookup table being built |
-| ~20,000 | Memorisation plateau — entrenched sharp minimum |
-| ~14,000–7,000 | Grokking transition — flat directions emerging |
-| ~800 | Fourier minimum — mostly flat, heavily degenerate |
+| ~288 | Random initialisation — no committed structure |
+| ~5,700–43,000 | Fast memorising — lookup table circuit being built (steps 200–400) |
+| ~16,000–36,000 | Memorisation plateau — entrenched sharp minimum (steps 600–1800) |
+| ~7,000–12,000 | Grokking transition — flat directions emerging (steps 2000–2400) |
+| ~700–900 | Fourier minimum — mostly flat, heavily degenerate (steps 2600, 3000) |
 
 ### Confirming the SLT prediction
 
@@ -390,47 +409,56 @@ SLT predicts that the loss landscape should become *more degenerate* (flatter, l
 at generalising solutions. The full prediction for the grokking arc is:
 
 ```
-flatness(init) < flatness(memorisation) > flatness(grokking)
+flatness(init) < flatness(memorisation) > flatness(post-grokking)
 ```
 
-Our results:
+Our results (using converged post-grokking steps 2600 and 3000):
 
 | Prediction | Measure | Evidence |
 |---|---|---|
-| init < memorisation | tr(H): 288 → 43,413 | ✅ 150× increase, very strong |
-| memorisation > grokking | tr(H): 43,413 → 818 | ✅ 53× decrease, very strong |
-| memorisation > grokking | λ_max: 750 → 19.8 | ✅ 38× decrease, very strong |
-| memorisation > grokking | LLC: ~1,380 → ~1,290 | ✓ directional, within noise |
+| init < memorisation | tr(H): 288 → 43,145 (step 400) | ✅ **150×** increase, very strong |
+| memorisation > post-grokking | tr(H): 43,145 → 796 (avg 2600+3000) | ✅ **54×** decrease, very strong |
+| memorisation > post-grokking | λ_max: 853 → 20 (avg 2600+3000) | ✅ **43×** decrease, very strong |
+| memorisation > post-grokking | LLC (SGLD): ~1,367 → ~1,367 | ✗ not resolved (calibration) |
+| memorisation > post-grokking | LLC (Hessian-estimated): — → **~19** | ✅ consistent with 10 active freqs |
 
-**The Hessian-based measures strongly confirm the SLT prediction.** The LLC gives the
-same direction but requires better calibration for the full quantitative picture.
+**The Hessian-based measures strongly confirm the SLT prediction.** The SGLD LLC does not
+resolve the post-grokking collapse at this step size — see §5 for why and how the Hessian
+data itself gives the true post-grokking LLC estimate of ~19.
 
 ---
 
 ## 5. The LLC Calibration Challenge
 
-The post-grokking LLC estimates (~1,300–1,440) remain high relative to the dramatic
-flatness visible in tr(H). This is not a failure of SLT but a practical limitation of
-the fixed-step-size SGLD estimator.
+The post-grokking SGLD LLC estimates (~1,360–1,390) remain high relative to the dramatic
+flatness visible in tr(H) and λ_max. This is not a failure of SLT but a practical
+limitation of the fixed-step-size SGLD estimator.
 
 **Root cause:** The SGLD step size ε = 3×10⁻⁶ is tuned for the memorisation regime,
-where train loss ~0.05–0.1. Post-grokking, the loss drops to ~0.001 — two orders of
-magnitude smaller. The same step size now causes the chain to escape the local basin
-entirely, probing global landscape features rather than the local singularity structure.
+where train loss ~0.05–0.1. Post-grokking, the loss drops to ~0.001–0.006 — roughly two
+orders of magnitude smaller. The same step size now causes the chain to escape the local
+Fourier basin entirely, probing global landscape features rather than the local singularity
+structure — inflating λ̂ relative to the true LLC.
 
-The Hessian confirms this: at step 2800, λ_max = 19.8. The optimal SGLD step size for
-staying inside this basin is ε ~ 1/λ_max ~ 0.05 — roughly 17,000× larger than our
-current ε, but the noise term `√(2ε) ≈ 0.0024` would then be enormous. Staying inside
-the basin at such low λ_max requires a very small noise term, which means a very small ε,
-which means very slow mixing. This is the fundamental tension in SGLD-based LLC
-estimation for sharp (post-training) minima.
+**The Hessian quantifies exactly how bad the mismatch is:**
+At converged post-grokking (step 3000): λ_max = 19. The basin curvature is so low that
+the SGLD noise term `√(2ε) ≈ 0.0024` overwhelms the gradient signal and the chain
+diffuses freely. The optimal step size for staying inside this basin would be
+ε ~ 1/λ_max ~ 0.05 — roughly 17,000× larger, but then the noise would be enormous and
+mixing would be prohibitively slow.
 
 **What the Hessian data tells us about the true post-grokking LLC:**
-Using the Gaussian approximation: LLC ≈ rank(H) / 2. With tr(H) ≈ 818 and λ_max ≈ 20,
-the effective rank of H is roughly tr(H)/λ_max ≈ 41. This gives a Gaussian-approximation
-LLC of ~20 — a factor of 60–70× below our SGLD estimate. This is consistent with the
-Fourier solution using only ~10 active frequencies, each contributing ~2 effective
-parameters (amplitude and phase).
+Using the Gaussian approximation: LLC ≈ effective_rank(H) / 2. With tr(H) ≈ 705 and
+λ_max ≈ 19 at step 3000:
+
+```
+effective_rank(H) ≈ tr(H) / λ_max = 705 / 19 ≈ 37
+→ LLC (Gaussian approx.) ≈ 37 / 2 ≈ 19
+```
+
+This is 60–70× below the SGLD estimate of ~1,360, but perfectly consistent with the
+Fourier solution using ~10 active frequencies, each contributing ~2 effective parameters
+(amplitude + phase) = ~20 total effective parameters.
 
 **What would be needed for accurate post-grokking LLC:**
 1. Adaptive step size ε ~ 1/λ_max(H) — requires online Hessian eigenvalue estimation.

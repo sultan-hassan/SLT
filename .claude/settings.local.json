@@ -10,7 +10,8 @@
       "Bash(.venv/bin/python -c ' *)",
       "Bash(.venv/bin/python train.py --quick)",
       "Bash(.venv/bin/python train.py)",
-      "Bash(.venv/bin/python train.py --delayed)"
+      "Bash(.venv/bin/python train.py --delayed)",
+      "Bash(.venv/bin/python -)"
     ]
   }
 }

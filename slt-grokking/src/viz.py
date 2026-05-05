@@ -460,6 +460,140 @@ def plot_loss_surfaces(panels: list[dict], save_path: str | None = None):
     return fig
 
 
+def plot_hessian_phases(metrics: dict, save_path: str | None = None):
+    """
+    Presentation figure: Hessian trace (top) + accuracy curves (bottom) stacked
+    on a shared x-axis. Phase bands align across both panels so the audience can
+    immediately see that tr(H) collapses exactly when test accuracy jumps.
+    """
+    _apply_style()
+
+    h_steps    = np.array(metrics["llc_steps"])
+    htraces    = np.array(metrics["htrace"])
+    eval_steps = np.array(metrics["eval_steps"])
+    train_acc  = np.array(metrics["train_acc"])
+    test_acc   = np.array(metrics["test_acc"])
+
+    # Phase boundaries (same logic used everywhere else)
+    memo_idx  = np.where(train_acc > 0.95)[0]
+    grokk_idx = np.where(test_acc  > 0.50)[0]
+    memo_step  = int(eval_steps[memo_idx[0]])  if len(memo_idx)  else None
+    grokk_step = int(eval_steps[grokk_idx[0]]) if len(grokk_idx) else None
+    xmax = int(eval_steps[-1])
+
+    fig, (ax_h, ax_a) = plt.subplots(
+        2, 1, figsize=(10, 6), sharex=True,
+        gridspec_kw={"height_ratios": [1.4, 1], "hspace": 0.08},
+    )
+    fig.suptitle(
+        "Hessian Trace Tracks Grokking Phase Transitions\n"
+        "tr(H) rises during memorisation, holds at plateau, collapses when grokking fires",
+        fontsize=12, fontweight="bold",
+    )
+
+    def _shade(ax):
+        a = 0.08
+        if memo_step:
+            ax.axvspan(0, memo_step, alpha=a, color="#2196F3", zorder=0)
+        if memo_step and grokk_step and grokk_step > memo_step:
+            ax.axvspan(memo_step, grokk_step, alpha=a, color="#FF9800", zorder=0)
+        if grokk_step:
+            ax.axvspan(grokk_step, xmax, alpha=a, color="#4CAF50", zorder=0)
+
+    # ── Top panel: Hessian trace ────────────────────────────────────────────
+    _shade(ax_h)
+    ax_h.plot(h_steps, htraces, color="#E91E63", lw=2.2, marker="o", ms=4,
+              zorder=3, label="tr(H)")
+    ax_h.set_ylabel("Hessian trace  tr(H)", fontsize=11)
+    ax_h.tick_params(labelbottom=False)
+
+    # Phase labels inside top panel
+    if memo_step:
+        ax_h.text(memo_step * 0.45, 0.93, "Memorising",
+                  transform=ax_h.get_xaxis_transform(),
+                  ha="center", fontsize=9, color="#1565C0", style="italic", fontweight="bold")
+    if memo_step and grokk_step:
+        ax_h.text((memo_step + grokk_step) / 2, 0.93, "Plateau",
+                  transform=ax_h.get_xaxis_transform(),
+                  ha="center", fontsize=9, color="#E65100", style="italic", fontweight="bold")
+    if grokk_step:
+        ax_h.text((grokk_step + xmax) / 2, 0.93, "Grokking",
+                  transform=ax_h.get_xaxis_transform(),
+                  ha="center", fontsize=9, color="#1B5E20", style="italic", fontweight="bold")
+
+    # Annotate peak (restrict to memorising phase) and post-grokking trough
+    if grokk_step is not None:
+        memo_mask = h_steps < grokk_step
+        peak_idx  = int(np.argmax(htraces[memo_mask])) if memo_mask.sum() else int(np.argmax(htraces))
+    else:
+        peak_idx = int(np.argmax(htraces))
+
+    peak_val  = htraces[peak_idx]
+    peak_step = h_steps[peak_idx]
+
+    if grokk_step is not None:
+        post_mask = h_steps >= grokk_step
+        if post_mask.sum() >= 2:
+            post_h = htraces[post_mask]
+            post_s = h_steps[post_mask]
+            trough_idx_local = int(np.argmin(post_h))
+            trough_val  = post_h[trough_idx_local]
+            trough_step = post_s[trough_idx_local]
+        else:
+            trough_val, trough_step = htraces[-1], h_steps[-1]
+    else:
+        trough_val, trough_step = htraces[-1], h_steps[-1]
+
+    ratio = peak_val / max(trough_val, 1.0)
+
+    ax_h.annotate(
+        f"Peak: {peak_val:,.0f}\n(memorising)",
+        xy=(peak_step, peak_val),
+        xytext=(peak_step + xmax * 0.04, peak_val * 0.82),
+        fontsize=8.5, color="#C2185B",
+        arrowprops=dict(arrowstyle="->", color="#C2185B", lw=1.2),
+    )
+    ax_h.annotate(
+        f"Trough: {trough_val:,.0f}\n({ratio:.0f}× drop)",
+        xy=(trough_step, trough_val),
+        xytext=(trough_step - xmax * 0.18, trough_val + peak_val * 0.18),
+        fontsize=8.5, color="#1B5E20",
+        arrowprops=dict(arrowstyle="->", color="#1B5E20", lw=1.2),
+    )
+
+    # Mark post-grokking transient spikes: only flag values that jump back up
+    # AFTER the model has already settled into the Fourier minimum (tr(H) < 3× trough).
+    if grokk_step is not None:
+        post_mask = h_steps >= grokk_step
+        post_h = htraces[post_mask]
+        post_s = h_steps[post_mask]
+        settled = post_s[post_h < trough_val * 3]
+        if len(settled):
+            first_settled = settled[0]
+            spike_mask = (post_h > trough_val * 10) & (post_s >= first_settled)
+            for sp_step, sp_val in zip(post_s[spike_mask], post_h[spike_mask]):
+                ax_h.annotate(
+                    "AdamW\ntransient",
+                    xy=(sp_step, sp_val),
+                    xytext=(sp_step - xmax * 0.12, sp_val * 0.75),
+                    fontsize=7.5, color="#888888", style="italic",
+                    arrowprops=dict(arrowstyle="->", color="#aaaaaa", lw=1),
+                )
+
+    # ── Bottom panel: accuracy ──────────────────────────────────────────────
+    _shade(ax_a)
+    ax_a.plot(eval_steps, train_acc, color="#2196F3", lw=2,   label="Train acc")
+    ax_a.plot(eval_steps, test_acc,  color="#F44336", lw=2, ls="--", label="Test acc")
+    ax_a.set_ylim(-0.05, 1.05)
+    ax_a.set_ylabel("Accuracy", fontsize=11)
+    ax_a.set_xlabel("Training step", fontsize=11)
+    ax_a.legend(loc="center right", fontsize=9)
+
+    plt.tight_layout()
+    _save(fig, save_path, "fig9_hessian_phases.png")
+    return fig
+
+
 def _save(fig, save_path, name):
     if save_path is not None:
         p = Path(save_path)
@@ -467,3 +601,183 @@ def _save(fig, save_path, name):
         fig.savefig(p / name, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"  saved → {p / name}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Figure 7 — Mech Interp: activation PCA across training phases
+# ─────────────────────────────────────────────────────────────────────────────
+
+def plot_activation_phases(
+    panels: list[dict],
+    p: int,
+    save_path: str | None = None,
+):
+    """
+    4-panel PCA of readout-slot activations, one panel per training phase.
+
+    Each panel entry:
+        {"label": str, "step": int, "train_acc": float, "test_acc": float,
+         "proj": (N,2) ndarray, "labels": (N,) int ndarray, "var": (2,) ndarray}
+
+    Coloured by answer (a+b) mod p using a cyclic colormap.
+    Key message: cluster structure looks similar at the memorisation plateau and
+    post-grokking even though test accuracy jumps from ~20% to ~100%.
+    Activation PCA cannot distinguish the phases; the loss landscape (LLC) can.
+    """
+    _apply_style()
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.5 * len(panels), 4.5))
+    fig.suptitle(
+        "Mech Interp — Readout Activations (PCA) Across Training Phases\n"
+        "Cluster structure forms during memorisation and persists through grokking\n"
+        "— activations alone cannot identify when generalisation happened",
+        fontsize=11, fontweight="bold",
+    )
+
+    cmap = plt.cm.hsv
+    norm = plt.Normalize(0, p)
+
+    for ax, panel in zip(axes, panels):
+        proj   = panel["proj"]
+        labels = panel["labels"]
+        var    = panel["var"]
+
+        sc = ax.scatter(proj[:, 0], proj[:, 1], c=labels, cmap=cmap, norm=norm,
+                        s=8, alpha=0.6, linewidths=0)
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_xlabel(f"PC1 ({var[0]:.1%})")
+        ax.set_ylabel(f"PC2 ({var[1]:.1%})")
+
+        phase_color = {
+            "Init":        "#888888",
+            "Memorising":  "#E91E63",
+            "Plateau":     "#FF8F00",
+            "Post-grokking": "#1565C0",
+        }.get(panel["label"], "#333333")
+
+        ax.set_title(
+            f"{panel['label']}  (step {panel['step']})\n"
+            f"train {panel['train_acc']:.0%}  |  test {panel['test_acc']:.0%}",
+            fontsize=10, color=phase_color, fontweight="bold",
+        )
+
+        note_color = "#FFEBEE" if panel["test_acc"] < 0.5 else "#E8F5E9"
+        note = (
+            "Clusters forming\n⚠ test acc still low\n→ memorised, not understood"
+            if panel["test_acc"] < 0.5
+            else "Similar cluster structure\n✓ test acc high\n→ generalised circuit found"
+        )
+        ax.text(0.03, 0.03, note, transform=ax.transAxes, fontsize=8.5,
+                va="bottom", style="italic",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor=note_color, alpha=0.92))
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    fig.colorbar(sm, ax=axes[-1], label=f"Answer (a+b) mod {p}", shrink=0.8)
+    plt.tight_layout()
+    _save(fig, save_path, "fig7_activation_phases.png")
+    return fig
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Figure 8 — Two lenses: activation PCA vs LLC across phases
+# ─────────────────────────────────────────────────────────────────────────────
+
+def plot_two_lenses(
+    act_panels: list[dict],
+    llc_metrics: dict,
+    train_metrics: dict,
+    p: int,
+    save_path: str | None = None,
+):
+    """
+    2×2 grid: (Mech Interp row) × (Plateau | Post-grokking column).
+
+    Top row   — activation PCA: looks structurally similar in both phases.
+    Bottom row — LLC trajectory with phase markers: clearly different signal.
+
+    Core argument: PCA says 'both have learned'; LLC says 'only one generalised'.
+    """
+    _apply_style()
+
+    # Pick the plateau and post-grokking panels
+    plateau_panel = next((p for p in act_panels if p["label"] == "Plateau"), act_panels[-2])
+    grokk_panel   = next((p for p in act_panels if p["label"] == "Post-grokking"), act_panels[-1])
+
+    fig = plt.figure(figsize=(13, 9))
+    fig.suptitle(
+        "Two Lenses on Grokking\n"
+        "Activations say 'both learned'; LLC says 'only one learned robustly'",
+        fontsize=13, fontweight="bold",
+    )
+    gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.55, wspace=0.3,
+                           top=0.88, bottom=0.08)
+
+    cmap = plt.cm.hsv
+    norm_c = plt.Normalize(0, p)
+
+    # ── Row 0: Activation PCA ────────────────────────────────────────────────
+    for col, panel in enumerate([plateau_panel, grokk_panel]):
+        ax = fig.add_subplot(gs[0, col])
+        proj, labels, var = panel["proj"], panel["labels"], panel["var"]
+        ax.scatter(proj[:, 0], proj[:, 1], c=labels, cmap=cmap, norm=norm_c,
+                   s=8, alpha=0.6, linewidths=0)
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_title(
+            f"Mech Interp — {panel['label']}\n"
+            f"step {panel['step']}  ·  test {panel['test_acc']:.0%}",
+            fontsize=10.5,
+        )
+        note = ("Clusters look structured.\n"
+                '"Model seems to have learned."\n'
+                "⚠ Can't assess whether it generalised.")
+        ax.text(0.03, 0.03, note, transform=ax.transAxes, fontsize=8.5,
+                va="bottom", style="italic",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#FFF9C4", alpha=0.9))
+
+    # ── Row 1: LLC trajectory with phase shading ─────────────────────────────
+    for col in range(2):
+        ax = fig.add_subplot(gs[1, col])
+        focus_panel = [plateau_panel, grokk_panel][col]
+
+        llc_steps = np.array(llc_metrics["llc_steps"])
+        llc_vals  = np.array(llc_metrics["llc"])
+        eval_steps = np.array(train_metrics["eval_steps"])
+        test_acc   = np.array(train_metrics["test_acc"])
+        train_acc  = np.array(train_metrics["train_acc"])
+
+        # Phase shading
+        memo_step  = eval_steps[np.where(train_acc > 0.95)[0][0]] if np.any(train_acc > 0.95) else None
+        grokk_step = eval_steps[np.where(test_acc  > 0.50)[0][0]] if np.any(test_acc  > 0.50) else None
+        xmax = eval_steps[-1]
+
+        if memo_step:
+            ax.axvspan(0, memo_step, alpha=0.07, color="#E91E63", label="Memorising")
+        if memo_step and grokk_step:
+            ax.axvspan(memo_step, grokk_step, alpha=0.07, color="#FF8F00", label="Plateau")
+        if grokk_step:
+            ax.axvspan(grokk_step, xmax, alpha=0.07, color="#1565C0", label="Grokking")
+
+        ax.plot(llc_steps, llc_vals, color="#7B1FA2", lw=2.5, marker="o", ms=5)
+
+        # Mark the focus step
+        focus_step = focus_panel["step"]
+        focus_llc  = float(np.interp(focus_step, llc_steps, llc_vals))
+        ax.axvline(focus_step, color="black", lw=1.5, ls="--", alpha=0.7)
+        ax.scatter([focus_step], [focus_llc], color="black", s=80, zorder=5)
+        ax.annotate(
+            f"LLC={focus_llc:.0f}\n(this phase)",
+            xy=(focus_step, focus_llc),
+            xytext=(focus_step + xmax * 0.05, focus_llc * 1.05),
+            fontsize=8.5, arrowprops=dict(arrowstyle="->", lw=1),
+        )
+
+        ax.set_xlabel("Training step"); ax.set_ylabel("LLC λ̂")
+        ax.set_title(
+            f"SLT — LLC trajectory  [{focus_panel['label']}]",
+            fontsize=10.5,
+        )
+        ax.legend(fontsize=8, loc="upper left")
+
+    plt.tight_layout()
+    _save(fig, save_path, "fig8_two_lenses.png")
+    return fig

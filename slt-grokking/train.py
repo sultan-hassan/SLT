@@ -23,6 +23,7 @@ from src.model import ModularTransformer, count_params
 from src.data import make_dataloaders
 from src.llc import estimate_llc
 from src.hessian import hessian_trace, top_eigenvalue, loss_surface_2d
+from src.mechinterp import get_readout_activations, pca2d
 from src.viz import (
     plot_training_dynamics,
     plot_llc_trajectory,
@@ -31,6 +32,9 @@ from src.viz import (
     plot_sgld_diagnostics,
     plot_flatness_trajectory,
     plot_loss_surfaces,
+    plot_activation_phases,
+    plot_two_lenses,
+    plot_hessian_phases,
 )
 
 
@@ -115,6 +119,13 @@ def train(cfg):
                2 * cfg.steps // 3,
                cfg.steps}
 
+    # Phase checkpoints for mech interp figure:
+    #   init (step 0), memorising, plateau, post-grokking
+    # Detected dynamically; filled in as training progresses.
+    phase_ckpts: dict[str, dict] = {}   # label → {state, step, train_acc, test_acc}
+    _phase_flags = {"memorising": False, "plateau": False, "grokking": False}
+    _memo_step: int = 0   # training step when Memorising was first detected
+
     train_iter = _cycle(train_loader)
     t0 = time.time()
 
@@ -159,6 +170,31 @@ def train(cfg):
             if step in {0, cfg.steps // 4, cfg.steps // 2, cfg.steps}:
                 plot_sgld_diagnostics(energies, llc, step, save_path=str(figures_dir))
 
+        # ── Phase checkpoints for mech interp ────────────────────────────────
+        if metrics["eval_steps"] and metrics["eval_steps"][-1] == step:
+            tr_a = metrics["train_acc"][-1]
+            te_a = metrics["test_acc"][-1]
+            _snap = lambda lbl: {
+                "state": {k: v.cpu() for k, v in model.state_dict().items()},
+                "step": step, "train_acc": tr_a, "test_acc": te_a,
+            }
+            if step == 0:
+                phase_ckpts["Init"] = _snap("Init")
+            if not _phase_flags["memorising"] and tr_a > 0.95:
+                phase_ckpts["Memorising"] = _snap("Memorising")
+                _phase_flags["memorising"] = True
+                _memo_step = step
+            # Plateau: captured well into the plateau (≥ llc_interval steps after
+            # Memorising) so it's a genuinely different checkpoint from Memorising.
+            if (_phase_flags["memorising"] and not _phase_flags["plateau"]
+                    and step >= _memo_step + cfg.llc_interval
+                    and tr_a > 0.98 and te_a < 0.40):
+                phase_ckpts["Plateau"] = _snap("Plateau")
+                _phase_flags["plateau"] = True
+            if not _phase_flags["grokking"] and te_a > 0.85:
+                phase_ckpts["Post-grokking"] = _snap("Post-grokking")
+                _phase_flags["grokking"] = True
+
         # ── Checkpoint for loss surface ───────────────────────────────────────
         if step in save_at:
             # record test acc at this step (interpolate from last eval)
@@ -192,9 +228,10 @@ def train(cfg):
     plot_llc_trajectory(metrics,    save_path=str(figures_dir))
     plot_phase_portrait(metrics,    save_path=str(figures_dir))
 
-    # ── Figure 5: Hessian flatness alongside LLC ──────────────────────────────
+    # ── Figure 4 / 9: Hessian flatness figures ───────────────────────────────
     if metrics["htrace"]:
         plot_flatness_trajectory(metrics, save_path=str(figures_dir))
+        plot_hessian_phases(metrics, save_path=str(figures_dir))
 
     # ── Figure 6: 2-D loss surface at 4 training stages ──────────────────────
     if surface_ckpts:
@@ -219,6 +256,38 @@ def train(cfg):
             {k: v.to(device) for k, v in surface_ckpts[cfg.steps]["state"].items()}
         )
         plot_loss_surfaces(panels, save_path=str(figures_dir))
+
+    # ── Figures 7–8: Mech Interp activation PCA ──────────────────────────────
+    if len(phase_ckpts) >= 2:
+        print("  Computing activation PCA for mech interp figures...")
+        # Use the full dataset loader so both memorised and generalised examples appear
+        _, _, full_loader = make_dataloaders(
+            p=cfg.p, train_frac=cfg.train_frac, batch_size=cfg.batch_size, seed=cfg.seed
+        )
+        act_panels = []
+        for label in ["Init", "Memorising", "Plateau", "Post-grokking"]:
+            if label not in phase_ckpts:
+                continue
+            ckpt = phase_ckpts[label]
+            model.load_state_dict({k: v.to(device) for k, v in ckpt["state"].items()})
+            acts, _, _, labs = get_readout_activations(model, full_loader, device)
+            proj, var = pca2d(acts)
+            act_panels.append({
+                "label": label,
+                "step":      ckpt["step"],
+                "train_acc": ckpt["train_acc"],
+                "test_acc":  ckpt["test_acc"],
+                "proj": proj, "labels": labs, "var": var,
+            })
+        # Restore final weights
+        model.load_state_dict(
+            {k: v.to(device) for k, v in phase_ckpts.get(
+                "Post-grokking", list(phase_ckpts.values())[-1])["state"].items()}
+        )
+        if act_panels:
+            plot_activation_phases(act_panels, cfg.p, save_path=str(figures_dir))
+            plot_two_lenses(act_panels, metrics, metrics, cfg.p,
+                            save_path=str(figures_dir))
 
     # ── Figure 4: model comparison ────────────────────────────────────────────
     if cfg.model_sweep:
@@ -329,17 +398,22 @@ if __name__ == "__main__":
         # Classic delayed-grokking regime (Power et al. 2022 style):
         #   - 1-layer transformer — simpler, memorises easily but generalises slowly
         #   - 30% train fraction  — less data makes the generalising algorithm harder to find
-        #   - 3 000 steps covers the full arc: memorise → plateau → grokk (done by ~2 600)
-        #   - LLC every 200 steps → ~15 estimates across the arc
-        cfg.p             = 97
-        cfg.d_model       = 128
-        cfg.n_heads       = 4
-        cfg.n_layers      = 1
-        cfg.train_frac    = 0.30
-        cfg.steps         = 3_000
-        cfg.eval_interval = 100
-        cfg.llc_interval  = 200
-        cfg.llc_steps     = 200
-        cfg.llc_burnin    = 50
+        #   - 5 000 steps covers the full arc: memorise → plateau → grokk
+        #   - LLC every 250 steps → ~20 estimates across the arc
+        #   - localization=100 (σ=0.1/param) so the SGLD chain probes the full basin
+        #     geometry and can detect the LLC drop during grokking.  The previous
+        #     default of 10 000 (σ=0.01) only sampled local Hessian curvature.
+        cfg.p                = 97
+        cfg.d_model          = 128
+        cfg.n_heads          = 4
+        cfg.n_layers         = 1
+        cfg.train_frac       = 0.30
+        cfg.steps            = 5_000
+        cfg.eval_interval    = 100
+        cfg.llc_interval     = 250
+        cfg.llc_steps        = 200
+        cfg.llc_burnin       = 50
+        cfg.llc_localization = 100.0
+        cfg.llc_step_size    = 3e-5
 
     train(cfg)

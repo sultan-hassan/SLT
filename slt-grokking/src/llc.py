@@ -28,6 +28,12 @@ Localisation:
   The extra spring force  γ·(w − w*)  keeps the chain near w*.
   This gives the *localised LLC* — the singularity depth of the local basin at w*.
   Set γ=0 to recover the original estimator.
+
+Per-batch baseline:
+  Both L(w_t) and L(w*) are evaluated on the same mini-batch so that mini-batch
+  sampling variance cancels out of the energy difference.  Using a fixed full-dataset
+  baseline causes the measured energies to track mini-batch variance rather than
+  curvature once training loss → 0.
 """
 
 import copy
@@ -39,68 +45,56 @@ from torch.utils.data import DataLoader
 from typing import Optional
 
 
-@torch.no_grad()
-def _full_loss(model: nn.Module, criterion: nn.Module,
-               loader: DataLoader, device: str) -> float:
-    """Mean cross-entropy loss over the full loader."""
-    model.eval()
-    total, count = 0.0, 0
-    for a, b, c in loader:
-        a, b, c = a.to(device), b.to(device), c.to(device)
-        logits = model(a, b)
-        total += criterion(logits, c).item() * len(a)
-        count += len(a)
-    return total / count
-
-
 def estimate_llc(
     model: nn.Module,
     criterion: nn.Module,
     train_loader: DataLoader,
     n_steps: int = 200,
-    step_size: float = 3e-6,
+    step_size: float = 3e-5,
     beta: Optional[float] = None,
-    localization: float = 10_000.0,
+    localization: float = 100.0,
     device: str = "cpu",
     burnin: int = 50,
 ) -> tuple[float, list[float]]:
     """
     Estimate the Local Learning Coefficient at the current weights via localised SGLD.
 
+    Key parameter choices for transformers on modular arithmetic:
+      step_size    3e-5   — larger than before so the chain explores a meaningful radius
+      localization  100   — stationary std σ = 1/√loc ≈ 0.1 per parameter, large enough
+                            for the chain to sense the difference between the memorisation
+                            basin (sharp → high LLC) and the grokking basin (flat → low LLC).
+                            The previous default of 10,000 gave σ=0.01, which only probed
+                            the local Hessian and missed the basin-level geometry change.
+
     Parameters
     ----------
     model         : network at its current weights w*
     criterion     : loss function (reduction='mean')
     train_loader  : dataloader for the training set
-    n_steps       : SGLD steps to collect after burnin (more → lower variance, slower)
+    n_steps       : SGLD steps to collect after burnin
     step_size     : SGLD step size ε
     beta          : inverse temperature; defaults to 1/log(n_train) — the WBIC choice
     localization  : γ ≥ 0, spring constant keeping SGLD near w*.
-                    γ=0 → global SGLD; γ>0 → localised (recommended for sharp minima).
-                    Typical range 1–1000; tune so SGLD energy trace looks like a
-                    stationary noisy signal rather than a drift.
+                    Stationary std per parameter = 1/√γ.
+                    Typical range 10–1000; tune so SGLD energy trace is stationary.
     burnin        : initial SGLD steps discarded to allow mixing
 
     Returns
     -------
     llc     : scalar LLC estimate λ̂
-    energies: per-step (L(w_t) − L(w*)) values for diagnostics
+    energies: per-step (L_batch(w_t) − L_batch(w*)) values for diagnostics
     """
     n = len(train_loader.dataset)
     if beta is None:
         beta = 1.0 / math.log(n)
 
-    # Stable baseline at w*
-    baseline = _full_loss(model, criterion, train_loader, device)
-
-    # Keep a frozen copy of w* for the localisation spring
     sgld_model = copy.deepcopy(model).to(device)
     w_star = {name: p.data.clone() for name, p in sgld_model.named_parameters()}
 
     sgld_model.train()
     train_iter = _infinite(train_loader)
     energies: list[float] = []
-
     scale = beta * n          # gradient scale factor (per full dataset)
 
     for step in range(n_steps + burnin):
@@ -111,8 +105,6 @@ def estimate_llc(
         loss = criterion(sgld_model(a, b), c)
         loss.backward()
 
-        # SGLD update: energy = β·n·L_n(w) + (γ/2)·‖w−w*‖²
-        # ∇U ≈ (scale/|B|)·∇L_B + γ·(w−w*)
         batch_scale = scale / len(a)
         with torch.no_grad():
             for name, param in sgld_model.named_parameters():
@@ -125,15 +117,23 @@ def estimate_llc(
 
         if step >= burnin:
             with torch.no_grad():
-                batch_loss = criterion(sgld_model(a, b), c).item()
-            energies.append(batch_loss - baseline)
+                sgld_model.eval()
+                # Per-batch baseline: evaluate L(w*) on the same batch so that
+                # mini-batch variance cancels out of the energy difference.
+                w_t = {n: p.data.clone() for n, p in sgld_model.named_parameters()}
+                for nm, p in sgld_model.named_parameters():
+                    p.data.copy_(w_star[nm])
+                baseline_batch = criterion(sgld_model(a, b), c).item()
+                for nm, p in sgld_model.named_parameters():
+                    p.data.copy_(w_t[nm])
+                perturbed = criterion(sgld_model(a, b), c).item()
+                sgld_model.train()
+                energies.append(max(0.0, perturbed - baseline_batch))
 
-    # λ̂ = β·n·E[L(w) − L(w*)]
     llc = beta * n * float(np.mean(energies))
     return llc, energies
 
 
 def _infinite(loader: DataLoader):
-    """Cycle a DataLoader forever."""
     while True:
         yield from loader

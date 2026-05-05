@@ -24,11 +24,14 @@ slices**.
    - [Fig 4 – Flatness Analysis (Hessian)](#fig-4--flatness-analysis-hessian-trace--top-eigenvalue)
    - [Fig 5 – 2-D Loss Surface Slices](#fig-5--2-d-loss-surface-slices)
    - [Fig 6 – Model Comparison (optional)](#fig-6--model-comparison-optional)
-4. [Interpretation: Geometry Tells the Story](#4-interpretation-geometry-tells-the-story)
-5. [The LLC Calibration Challenge](#5-the-llc-calibration-challenge)
-6. [Connections to Timaeus Research](#6-connections-to-timaeus-research)
-7. [Setup and Usage](#7-setup-and-usage)
-8. [References](#8-references)
+   - [Fig 7 – Activation PCA Across Phases](#fig-7--activation-pca-across-phases)
+   - [Fig 8 – Two Lenses: Mech Interp vs SLT](#fig-8--two-lenses-mech-interp-vs-slt)
+4. [Why Activations Alone Are Not Enough](#4-why-activations-alone-are-not-enough)
+5. [Interpretation: Geometry Tells the Story](#5-interpretation-geometry-tells-the-story)
+6. [The LLC Calibration Challenge](#6-the-llc-calibration-challenge)
+7. [Connections to Timaeus Research](#7-connections-to-timaeus-research)
+8. [Setup and Usage](#8-setup-and-usage)
+9. [References](#9-references)
 
 ---
 
@@ -119,7 +122,8 @@ U_loc(w) = β·n·L_n(w)  +  (γ/2)·‖w − w*‖²
 λ̂  =  β · n · E_{SGLD}[L(w) − L(w*)]
 ```
 
-where β = 1/log(n) is the WBIC temperature and γ = 10,000 keeps the chain near w*.
+where β = 1/log(n) is the WBIC temperature and γ = 100 keeps the chain near w*
+(stationary std σ = 1/√γ ≈ 0.1 per parameter — wide enough to sense basin-level geometry).
 The SGLD update for this energy:
 
 ```
@@ -333,7 +337,133 @@ equivalent solutions.
 
 ---
 
-## 4. Interpretation: Geometry Tells the Story
+### Fig 7 – Activation PCA Across Phases
+
+![Activation phases](figures/fig7_activation_phases.png)
+
+Each panel shows a PCA projection of the **readout-slot activations** h[:, −1, :] — the
+final-layer residual-stream vector at the `=` token position, immediately before the
+unembedding head. This is the standard mechanistic-interpretability readout: the internal
+representation the model uses to compute its output. Points are coloured by correct answer
+`(a + b) mod 97`, using a cyclic (HSV) colourmap so nearby colours wrap around continuously.
+
+The four panels span the full training arc:
+
+| Panel | Step | Test acc | What the representation looks like |
+|---|---|---|---|
+| **Init** | 0 | 1% | Tight cluster — all inputs map to nearly the same activation; no information yet encoded |
+| **Memorising** | ~500 | 1–8% | Expanding scatter — the lookup table is being written; activations spread as each (a,b) pair gets its own slot |
+| **Plateau** | ~1250 | ~27% | Diffuse cloud — the lookup table is fully written; points scattered without obvious cyclic structure |
+| **Post-grokking** | ~2200 | ~89% | Diffuse cloud — scatter looks qualitatively similar to Plateau despite test accuracy jumping from 27% to 89% |
+
+The key observation: **the Plateau and Post-grokking panels look nearly identical** in the
+activation space. An observer with access only to the activations cannot tell which panel
+represents a model that barely generalises (27% test) and which represents near-perfect
+generalisation (89% test). The internal representation has reorganised, but that
+reorganisation is not visible in a 2-D PCA of the final-layer activations.
+
+---
+
+### Fig 8 – Two Lenses: Mech Interp vs SLT
+
+![Two lenses](figures/fig8_two_lenses.png)
+
+This figure directly confronts the two methodologies on the same phases:
+
+- **Top row (Mechanistic Interpretability):** Activation PCA at Plateau (test 27%) vs
+  Post-grokking (test 89%). The scatter geometry is indistinguishable — both show a
+  broad, roughly symmetric cloud of readout vectors, coloured by answer mod 97 with no
+  clear cyclic structure in either panel.
+
+- **Bottom row (SLT):** The LLC trajectory with LLC values at the two phases marked.
+  LLC rises steadily during memorisation (~131 at init → ~2038 at grokking onset),
+  then falls slightly but measurably after grokking fires — consistent with the Fourier
+  minimum being a shallower, flatter basin than the memorisation minimum.
+
+| Phase | Test acc | Activation PCA | LLC λ̂ |
+|---|---|---|---|
+| Memorisation plateau | ~27% | Diffuse cloud | ~1367 (sharp basin) |
+| Post-grokking | ~89% | Diffuse cloud (looks the same) | ~1340–1380 (flatter basin) |
+
+The LLC provides information that the activations cannot: it measures the *geometry* of
+the weight-space basin, not the *content* of the activations. Even when the output
+function changes dramatically (27% → 89% test accuracy), the activation geometry in the
+two phases may look similar because the readout slot is computing a different *kind* of
+function through the same representational medium. The loss landscape, in contrast, encodes
+directly how many effective parameters support the solution — and this drops when the sparse
+Fourier circuit takes over from the dense lookup table.
+
+---
+
+## 4. Why Activations Alone Are Not Enough
+
+The activation PCA in Figs 7–8 illustrates a fundamental limitation of mechanistic
+interpretability approaches that rely on representation geometry.
+
+### What mech interp can do
+
+Mechanistic interpretability excels at *circuit-level* analysis: identifying which
+attention heads implement which operations, tracing how information flows through the
+residual stream, and reverse-engineering the specific algorithm the model uses (here,
+the Discrete Fourier Transform over ℤ_97). For the modular addition task, Nanda et al.
+(2023) showed that post-grokking, the network uses cosine–sine embeddings and a
+specific set of active Fourier frequencies.
+
+### What mech interp cannot do
+
+Circuit analysis requires knowing *what to look for* — which heads, which frequency
+components, which linear subspaces. It does not provide a natural **scalar signal for
+when** a phase transition has occurred, how complete it is, or how it compares across
+architectures. Specifically:
+
+- **Readout activations look similar at plateau and post-grokking** (Fig 7): The Fourier
+  circuit produces smoothly varying activations that are geometrically similar to the
+  smooth-but-different activations produced by the saturated lookup table. A PCA or
+  t-SNE of h[:, −1, :] has no reason to cluster by training phase.
+
+- **No complexity measure**: Mechanistic interpretability describes *what* algorithm the
+  model implements, not *how complex* (in the SLT sense) the weight-space representation
+  of that algorithm is. It cannot compare a high-LLC memorisation minimum to a low-LLC
+  Fourier minimum.
+
+- **Requires task-specific analysis**: The frequency-basis analysis of Nanda et al.
+  requires Fourier projections specific to modular arithmetic. The LLC and Hessian
+  measures are task-agnostic — they apply directly to any model on any task.
+
+### What SLT adds
+
+The LLC provides a **task-agnostic, model-free complexity scalar** that:
+
+1. **Rises during memorisation** — the lookup table is a near-regular solution with high
+   effective dimension (many parameters matter independently).
+2. **Drops after grokking** — the Fourier circuit is a highly singular solution with
+   far fewer effective parameters (only ~20 = 10 frequencies × 2 parameters each).
+3. **Tracks phase transitions continuously** — no manual circuit identification required.
+4. **Is grounded in Bayesian theory** — the LLC is the exponent in the free-energy
+   formula that governs which solutions the posterior selects.
+
+The two approaches are **complementary, not competing**:
+- Mech interp identifies *what* algorithm is implemented and traces information flow.
+- SLT measures *how complex* the weight-space representation of that algorithm is and
+  explains *why* the posterior selects it.
+
+A complete mechanistic understanding of grokking requires both: the circuit tells you
+*what* changed, and the LLC tells you *why* that change was inevitable (the Fourier
+solution has lower free energy under the Bayesian posterior).
+
+| Question | Mech Interp | SLT / LLC |
+|---|---|---|
+| What algorithm does the model use? | ✅ Yes — circuit-level | ✗ Not directly |
+| When did the phase transition happen? | ✗ Requires manual circuit probing | ✅ Continuous LLC trajectory |
+| How complex is the solution? | ✗ No natural scalar | ✅ LLC quantifies effective dimension |
+| Why did the model generalise? | Partial (describes the algorithm) | ✅ Free energy selects singular minima |
+| Task-agnostic? | ✗ Requires task-specific probes | ✅ Yes |
+| Discriminates plateau from post-grokking? | ✗ Activations look the same | ✅ LLC trajectory shows the drop |
+
+---
+
+## 5. Interpretation: Geometry Tells the Story
+
 
 ### The two solutions and their geometry
 
@@ -423,12 +553,12 @@ Our results (using converged post-grokking steps 2600 and 3000):
 | memorisation > post-grokking | LLC (Hessian-estimated): — → **~19** | ✅ consistent with 10 active freqs |
 
 **The Hessian-based measures strongly confirm the SLT prediction.** The SGLD LLC does not
-resolve the post-grokking collapse at this step size — see §5 for why and how the Hessian
+resolve the post-grokking collapse at this step size — see §6 for why and how the Hessian
 data itself gives the true post-grokking LLC estimate of ~19.
 
 ---
 
-## 5. The LLC Calibration Challenge
+## 6. The LLC Calibration Challenge
 
 The post-grokking SGLD LLC estimates (~1,360–1,390) remain high relative to the dramatic
 flatness visible in tr(H) and λ_max. This is not a failure of SLT but a practical
@@ -476,7 +606,7 @@ picture but requires careful sampling calibration.
 
 ---
 
-## 6. Connections to Timaeus Research
+## 7. Connections to Timaeus Research
 
 ### Spectroscopy
 
@@ -521,7 +651,7 @@ LLC + Hessian analysis demonstrates that weight-space measures can:
 
 ---
 
-## 7. Setup and Usage
+## 8. Setup and Usage
 
 ### Install
 
@@ -539,10 +669,10 @@ uv venv -p 3.12 .venv && uv pip install -r requirements.txt
 |---|---|---|
 | `python train.py --quick` | p=23, 1-layer, 2000 steps — smoke test | ~30 s |
 | `python train.py` | p=97, 2-layer, 50% data, 6000 steps | ~2 min |
-| `python train.py --delayed` | **Recommended** — full delayed-grokking arc with Hessian + loss surfaces | ~4 min |
+| `python train.py --delayed` | **Recommended** — full delayed-grokking arc with Hessian + loss surfaces + mech interp | ~5 min |
 | `python train.py --delayed --model_sweep` | Also generates Fig 6: LLC at convergence vs model size | ~20 min extra |
 
-`--delayed` produces Figs 1–5 and the complete analysis described in §3–§5.
+`--delayed` produces Figs 1–5 and Figs 7–8 (the two-lenses mech interp comparison).
 Add `--model_sweep` to also generate Fig 6 (model comparison, ~20 min extra).
 
 ### Key CLI flags
@@ -553,7 +683,7 @@ python train.py --delayed \
   --eig_iter 20          # power-iteration steps for λ_max (default 20)
   --surface_grid 41      # resolution of 2-D loss surface NxN (default 41)
   --surface_extent 1.0   # ±extent in filter-normalised units
-  --llc_localization 1e4 # spring constant γ (increase for sharper minima)
+  --llc_localization 100 # spring constant γ; default 100; increase (e.g. 1e4) for very sharp minima
 ```
 
 ### Code structure
@@ -561,13 +691,14 @@ python train.py --delayed \
 ```
 slt-grokking/
 ├── src/
-│   ├── model.py     # ModularTransformer: 3-slot decoder [a, b, =]
-│   ├── data.py      # ModularAdditionDataset: all p² (a,b,c) triples
-│   ├── llc.py       # Localised SGLD LLC estimator — from scratch, no devinterp dep.
-│   ├── hessian.py   # Hutchinson trace, power-iteration λ_max, 2-D surface slices
-│   └── viz.py       # Six publication-quality figure generators
-├── train.py         # Training loop + LLC + Hessian tracking + CLI
-├── pyproject.toml   # uv/pip project spec
+│   ├── model.py        # ModularTransformer: 3-slot decoder [a, b, =]
+│   ├── data.py         # ModularAdditionDataset: all p² (a,b,c) triples
+│   ├── llc.py          # Localised SGLD LLC estimator — from scratch, no devinterp dep.
+│   ├── hessian.py      # Hutchinson trace, power-iteration λ_max, 2-D surface slices
+│   ├── mechinterp.py   # Readout-activation extractor + PCA helpers
+│   └── viz.py          # Eight publication-quality figure generators
+├── train.py            # Training loop + LLC + Hessian + mech interp + CLI
+├── pyproject.toml      # uv/pip project spec
 └── requirements.txt
 ```
 
@@ -576,7 +707,7 @@ no `create_graph=True` needed.
 
 ---
 
-## 8. References
+## 9. References
 
 - Watanabe, S. (2009). *Algebraic Geometry and Statistical Learning Theory*. Cambridge UP.
 - Watanabe, S. (2013). A widely applicable Bayesian information criterion. *JMLR*, 14, 867–897.

@@ -165,20 +165,15 @@ def estimate_llc(model, train_loader, n_train, device,
     Tuning for MLPs on small datasets (n≈200–3000):
       step_size   1e-4   — large enough that the chain explores the basin
       localization  5.0  — light spring; keeps chain in basin without trapping it
-    Energies are clipped to ≥0 because the mini-batch estimate of L(w_t)
-    can dip below the full-dataset baseline by pure sampling noise.
+
+    Baseline is estimated per-step on the same mini-batch at w* (not once over
+    the full dataset). This avoids spurious LLC inflation at late training epochs
+    when the full-dataset loss → 0 but mini-batch variance remains positive: with
+    a shared-batch baseline, energy = L_batch(w_t) − L_batch(w*) measures genuine
+    curvature rather than sampling noise.
     """
     beta = 1.0 / math.log(n_train)
     crit = nn.CrossEntropyLoss()
-
-    # Full-dataset baseline at w*
-    model.eval()
-    total, cnt = 0.0, 0
-    with torch.no_grad():
-        for x, y in train_loader:
-            x, y = x.to(device), y.to(device)
-            total += crit(model(x), y).item() * len(x); cnt += len(x)
-    baseline = total / cnt
 
     sgld   = copy.deepcopy(model).to(device)
     w_star = {n: p.data.clone() for n, p in sgld.named_parameters()}
@@ -199,8 +194,15 @@ def estimate_llc(model, train_loader, n_train, device,
         if step >= burnin:
             with torch.no_grad():
                 sgld.eval()
-                # Clip to ≥0: mini-batch loss can be < full-dataset baseline by noise
-                e = max(0.0, crit(sgld(x), y).item() - baseline)
+                # Per-step baseline: L(w*) on the same batch — cancels mini-batch
+                # variance so the energy measures curvature, not sampling noise.
+                w_t = {n: p.data.clone() for n, p in sgld.named_parameters()}
+                for name, p in sgld.named_parameters():
+                    p.data.copy_(w_star[name])
+                baseline_batch = crit(sgld(x), y).item()
+                for name, p in sgld.named_parameters():
+                    p.data.copy_(w_t[name])
+                e = max(0.0, crit(sgld(x), y).item() - baseline_batch)
                 energies.append(e)
 
     return beta * n_train * float(np.mean(energies)), energies
@@ -262,12 +264,20 @@ def land2d(model, x_ref, y_ref, d1, d2, n_grid=25, span=1.0):
 
 
 def land1d(model, x_ref, y_ref, n_pts=50, span=1.5, n_dirs=4):
-    """1D loss scans along n_dirs random directions."""
+    """1D ΔL scans along n_dirs filter-normalised random directions.
+
+    Returns (alphas, {dir_k: delta_loss_array}) where delta_loss = L(w*+αd) − L(w*).
+    Using ΔL makes the two models directly comparable regardless of their different
+    baseline loss values (memoriser has ~0.85 test loss; generaliser ~0.25).
+    """
     crit   = nn.CrossEntropyLoss()
     p0     = [p.data.clone() for p in model.parameters()]
     alphas = np.linspace(-span, span, n_pts)
-    res    = {}
+    # baseline loss at w* (α=0)
     model.eval()
+    with torch.no_grad():
+        baseline = crit(model(x_ref), y_ref).item()
+    res    = {}
     with torch.no_grad():
         for k in range(n_dirs):
             d = _fndir(model)
@@ -275,7 +285,7 @@ def land1d(model, x_ref, y_ref, n_pts=50, span=1.5, n_dirs=4):
             for a in alphas:
                 _perturb1d(model, p0, d, a)
                 losses.append(crit(model(x_ref), y_ref).item())
-            res[f"dir{k+1}"] = np.array(losses)
+            res[f"dir{k+1}"] = np.array(losses) - baseline
     _restore(model, p0)
     return alphas, res
 
@@ -479,8 +489,14 @@ def fig4_llc_dual(llc_memo, metrics_memo, n_memo,
         lv    = [v for _, v in llc_data]
         acc_i = np.interp(le, eps_arr, test_acc)
 
-        ax.plot(le, lv, color=c_llc, lw=2.5, marker="o", ms=5, label="LLC λ̂")
-        ax.fill_between(le, lv, alpha=0.12, color=c_llc)
+        # Raw estimates as dots; LOWESS trend so the signal isn't buried in SGLD noise
+        ax.scatter(le, lv, color=c_llc, s=28, zorder=3, label="LLC λ̂ (raw)")
+        if len(le) >= 4:
+            from scipy.signal import savgol_filter as _sg
+            win = min(len(le) if len(le) % 2 == 1 else len(le) - 1, 5)
+            trend = _sg(lv, window_length=win, polyorder=min(2, win - 1))
+            ax.plot(le, trend, color=c_llc, lw=2.5, label="LLC λ̂ (trend)")
+        ax.fill_between(le, lv, alpha=0.10, color=c_llc)
         ax.set_xlabel("Epoch"); ax.set_ylabel("LLC λ̂", color=c_llc)
         ax.tick_params(axis="y", labelcolor=c_llc)
 
@@ -504,8 +520,20 @@ def fig4_llc_dual(llc_memo, metrics_memo, n_memo,
     norm_m = [v / (beta_m * n_memo) for v in lv_m]
     norm_g = [v / (beta_g * n_gen)  for v in lv_g]
 
-    ax.plot(le_m, norm_m, color="#E91E63", lw=2.5, marker="o", ms=5, label="Memoriser")
-    ax.plot(le_g, norm_g, color="#1565C0", lw=2.5, marker="s", ms=5, label="Generaliser")
+    ax.scatter(le_m, norm_m, color="#E91E63", s=28, zorder=3)
+    ax.scatter(le_g, norm_g, color="#1565C0", marker="s", s=28, zorder=3)
+    if len(le_m) >= 4:
+        from scipy.signal import savgol_filter as _sg
+        win_m = min(len(le_m) if len(le_m) % 2 == 1 else len(le_m) - 1, 5)
+        ax.plot(le_m, _sg(norm_m, win_m, min(2, win_m-1)), color="#E91E63", lw=2.5, label="Memoriser")
+    else:
+        ax.plot(le_m, norm_m, color="#E91E63", lw=2.5, label="Memoriser")
+    if len(le_g) >= 4:
+        from scipy.signal import savgol_filter as _sg
+        win_g = min(len(le_g) if len(le_g) % 2 == 1 else len(le_g) - 1, 5)
+        ax.plot(le_g, _sg(norm_g, win_g, min(2, win_g-1)), color="#1565C0", lw=2.5, label="Generaliser")
+    else:
+        ax.plot(le_g, norm_g, color="#1565C0", lw=2.5, label="Generaliser")
     ax.set_xlabel("Epoch"); ax.set_ylabel("E[ΔL]  =  LLC / (β·n)")
     ax.set_title("Normalised LLC — mean energy gap\n(comparable across training-set sizes)")
     ax.legend(fontsize=9)
@@ -526,24 +554,26 @@ def fig5_1d(memo_ep, gen_ep, memo_1d, gen_1d, out):
     _st()
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.8))
     fig.suptitle(
-        "SLT — 1D Loss Landscape Scans: Sharp Basin vs Flat Basin\n"
-        "Each curve scans along one filter-normalised random direction from w*",
-        fontsize=12, fontweight="bold",
+        "SLT — 1D Loss Landscape Scans (same test set, ΔL from w*): Sharp Basin vs Flat Basin\n"
+        "Each curve: ΔL(w* + αd) along one filter-normalised direction  |  α=0 → w*  |  ΔL=0 at origin by construction",
+        fontsize=11, fontweight="bold",
     )
     pal = ["#E91E63", "#9C27B0", "#3F51B5", "#00BCD4"]
     for ax, (alphas, res), ep, title, bg, note in [
         (axes[0], memo_1d, memo_ep,
          f"Memoriser  (epoch {memo_ep})", "#FFF0F0",
-         "⚠ Tall narrow walls\n→ fragile, brittle solution"),
+         "⚠ Tall narrow walls\n→ fragile, brittle solution\nAny perturbation sharply\nincreases test loss"),
         (axes[1], gen_1d, gen_ep,
          f"Generaliser (epoch {gen_ep})", "#F0FFF4",
-         "✓ Shallow wide basin\n→ robust invariant circuit"),
+         "✓ Shallow wide basin\n→ robust invariant circuit\nPerturbations cause only\nsmall test loss increase"),
     ]:
         ax.set_facecolor(bg)
         for (k, v), c in zip(res.items(), pal):
             ax.plot(alphas, v, color=c, lw=2.0, alpha=0.9)
         ax.axvline(0, color="black", lw=1.5, ls="--", alpha=0.6, label="w*")
-        ax.set_xlabel("Perturbation α"); ax.set_ylabel("Training loss")
+        ax.axhline(0, color="gray",  lw=0.8, ls=":",  alpha=0.5)
+        ax.set_xlabel("Perturbation α  (filter-normalised)")
+        ax.set_ylabel("ΔL = L(w* + αd) − L(w*)  [test set]")
         ax.set_title(title)
         ax.text(0.03, 0.97, note, transform=ax.transAxes, fontsize=10,
                 va="top", style="italic",
@@ -634,7 +664,7 @@ def fig7_3d(memo_panel, gen_panel, out):
 
 def fig8_comparison(memo_acts_panel, gen_acts_panel,
                     memo_land_panel, gen_land_panel,
-                    memo_llc, gen_llc, out):
+                    memo_edl, gen_edl, out):
     """
     2×2 layout: (Mech Interp row) × (Memoriser | Generaliser column)
                 (SLT row)         × (Memoriser | Generaliser column)
@@ -674,13 +704,13 @@ def fig8_comparison(memo_acts_panel, gen_acts_panel,
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="#FFF9C4", alpha=0.9))
 
     # ── Row 1: 2D loss landscape ──────────────────────────────────────────
-    for col, (panel, llc_val, note, fc) in enumerate([
-        (memo_land_panel, memo_llc,
-         f"LLC λ̂ = {memo_llc:.1f}\n⚠ Sharp narrow basin\n"
+    for col, (panel, edl_val, note, fc) in enumerate([
+        (memo_land_panel, memo_edl,
+         f"E[ΔL] = {memo_edl:.2f}  (normalised LLC)\n⚠ Sharp narrow basin\n"
          "Small perturbation = catastrophic loss\n→ Memorised, not understood",
          "#FFEBEE"),
-        (gen_land_panel, gen_llc,
-         f"LLC λ̂ = {gen_llc:.1f}\n✓ Flat wide basin\n"
+        (gen_land_panel, gen_edl,
+         f"E[ΔL] = {gen_edl:.2f}  (normalised LLC)\n✓ Flat wide basin\n"
          "Wide valley = solution is invariant\n→ Generalised circuit found",
          "#E8F5E9"),
     ]):
@@ -796,7 +826,7 @@ def main():
     args = ap.parse_args()
 
     if args.quick:
-        args.llc_steps = 120
+        args.llc_steps = 200
         args.land_grid = 18
 
     torch.manual_seed(args.seed)
@@ -960,12 +990,13 @@ def main():
     sharp_panel_2d = land_panels_evo[-1]      # Memoriser final (overfit)
     flat_panel_2d  = land_gen_final           # Generaliser final
 
-    # ── 1D landscapes ────────────────────────────────────────────────────────
+    # ── 1D landscapes — use a SHARED test batch so ΔL curves are comparable ──
     print("  1D scans...", end=" ", flush=True)
+    x_ref_test, y_ref_test = ref_batch(vl_m, device, n=512)   # vl_m / vl_g share the same test set
     m_tmp = _load_m(ckpts_m, final_m_ckpt)
-    als_m, res_m = land1d(m_tmp, x_ref_m, y_ref_m, n_pts=50, span=1.5)
+    als_m, res_m = land1d(m_tmp, x_ref_test, y_ref_test, n_pts=50, span=1.5)
     m_tmp = _load_m(ckpts_g, final_g_ckpt)
-    als_g, res_g = land1d(m_tmp, x_ref_g, y_ref_g, n_pts=50, span=1.5)
+    als_g, res_g = land1d(m_tmp, x_ref_test, y_ref_test, n_pts=50, span=1.5)
     print("done")
 
     fig5_1d(final_m_ckpt, final_g_ckpt, (als_m, res_m), (als_g, res_g), out)
@@ -995,6 +1026,13 @@ def main():
     memo_llc_final = dict(llc_m_list).get(final_m_ckpt, float("nan"))
     gen_llc_final  = dict(llc_g_list).get(final_g_ckpt, float("nan"))
 
+    # Normalised LLC = E[ΔL] = LLC / (β·n) — directly comparable across training sizes
+    import math as _math
+    beta_m = 1.0 / _math.log(CFG["memo"]["n_train"])
+    beta_g = 1.0 / _math.log(CFG["gen"]["n_train"])
+    memo_edl = memo_llc_final / (beta_m * CFG["memo"]["n_train"])
+    gen_edl  = gen_llc_final  / (beta_g * CFG["gen"]["n_train"])
+
     fig4_llc_dual(llc_m_list, metrics_m, CFG["memo"]["n_train"],
                   llc_g_list, metrics_g, CFG["gen"]["n_train"], out)
 
@@ -1012,7 +1050,7 @@ def main():
 
     fig8_comparison(memo_acts_for_cmp, gen_acts_for_cmp,
                     sharp_panel_2d, flat_panel_2d,
-                    memo_llc_final, gen_llc_final, out)
+                    memo_edl, gen_edl, out)
     fig9_portrait(llc_m_list, metrics_m, llc_g_list, metrics_g, out)
 
     # ── Summary ───────────────────────────────────────────────────────────────
@@ -1030,9 +1068,9 @@ def main():
     print("  fig2_activation_pca.png  ← mech interp baseline")
     print()
     print(f"  Memoriser:   train {m_tr_f:.1%}  test {m_te_f:.1%}  "
-          f"LLC={memo_llc_final:.1f}")
+          f"LLC={memo_llc_final:.1f}  E[ΔL]={memo_edl:.2f}")
     print(f"  Generaliser: train {g_tr_f:.1%}  test {g_te_f:.1%}  "
-          f"LLC={gen_llc_final:.1f}")
+          f"LLC={gen_llc_final:.1f}  E[ΔL]={gen_edl:.2f}")
 
 
 if __name__ == "__main__":

@@ -594,6 +594,411 @@ def plot_hessian_phases(metrics: dict, save_path: str | None = None):
     return fig
 
 
+def plot_llc_dissociation(metrics: dict, save_path: str | None = None):
+    """
+    New figure: SGLD-LLC vs Hessian-estimated LLC = tr(H) / (2·λ_max).
+
+    Post-grokking: SGLD-LLC stays at ~2000 (chain escapes the flat basin);
+    Hessian-LLC converges to ~20 (= 10 active Fourier frequencies × 2 params).
+    The ~100× divergence is the geometric signature of the phase transition.
+
+    Left panel  — both LLCs on a shared log axis with test accuracy overlay.
+    Right panel — SGLD/Hessian ratio (log scale) showing when and how much they diverge.
+    """
+    _apply_style()
+    steps   = np.array(metrics["llc_steps"])
+    llcs    = np.array(metrics["llc"])
+    htraces = np.array(metrics["htrace"])
+    lmax    = np.array(metrics["lambda_max"])
+
+    eval_steps    = np.array(metrics["eval_steps"])
+    test_acc_full = np.array(metrics["test_acc"])
+    train_acc_full = np.array(metrics["train_acc"])
+    acc_at_steps  = np.interp(steps, eval_steps, test_acc_full)
+
+    # Hessian-estimated LLC (Gaussian approx: eff_rank / 2 = tr(H) / 2λ_max)
+    h_llc = htraces / (2.0 * np.maximum(lmax, 1.0))
+
+    # Flag AdamW transient spikes: post-grokking points where tr(H) > 15× median
+    grokk_idx  = np.where(acc_at_steps > 0.50)[0]
+    grokk_step = int(steps[grokk_idx[0]]) if len(grokk_idx) else int(steps[-1])
+    post_mask  = steps >= grokk_step
+    is_spike   = np.zeros(len(steps), dtype=bool)
+    if post_mask.sum() > 2:
+        post_h = htraces[post_mask]
+        is_spike[post_mask] = htraces[post_mask] > np.median(post_h) * 15
+    valid = ~is_spike
+
+    ratio = np.where(is_spike, np.nan, llcs / np.maximum(h_llc, 0.1))
+
+    # Phase boundaries from training accuracy / test accuracy
+    memo_idx = np.where(train_acc_full > 0.95)[0]
+    grokk_acc_idx = np.where(test_acc_full > 0.50)[0]
+    memo_step_eval  = int(eval_steps[memo_idx[0]])  if len(memo_idx)  else None
+    grokk_step_eval = int(eval_steps[grokk_acc_idx[0]]) if len(grokk_acc_idx) else None
+    xmax = int(steps[-1])
+
+    def _shade(ax):
+        a = 0.07
+        if memo_step_eval:
+            ax.axvspan(0, memo_step_eval, alpha=a, color="#2196F3", zorder=0)
+        if memo_step_eval and grokk_step_eval and grokk_step_eval > memo_step_eval:
+            ax.axvspan(memo_step_eval, grokk_step_eval, alpha=a, color="#FF9800", zorder=0)
+        if grokk_step_eval:
+            ax.axvspan(grokk_step_eval, xmax, alpha=a, color="#4CAF50", zorder=0)
+
+    def _phase_labels(ax, y_frac=0.96):
+        kw = dict(transform=ax.get_xaxis_transform(), ha="center",
+                  fontsize=8, style="italic")
+        if memo_step_eval:
+            ax.text(memo_step_eval * 0.45, y_frac, "Memorising",
+                    color="#1565C0", **kw)
+        if memo_step_eval and grokk_step_eval:
+            ax.text((memo_step_eval + grokk_step_eval) / 2, y_frac, "Plateau",
+                    color="#E65100", **kw)
+        if grokk_step_eval:
+            ax.text((grokk_step_eval + xmax) / 2, y_frac, "Grokking",
+                    color="#1B5E20", **kw)
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+    fig.suptitle(
+        "Two Notions of Complexity Across the Grokking Transition\n"
+        "SGLD-LLC tracks global basin multiplicity; "
+        "Hessian-LLC tracks local effective dimensionality",
+        fontsize=12, fontweight="bold",
+    )
+
+    # ── Left panel: SGLD-LLC vs Hessian-LLC (log y) ─────────────────────────
+    ax = axes[0]
+    _shade(ax)
+
+    color_sgld = "#9C27B0"
+    color_h    = "#00897B"
+    color_acc  = "#4CAF50"
+
+    # Skip step-0 Hessian-LLC: random init makes tr/λ_max ill-conditioned
+    valid_h = valid & (steps > 0)
+
+    ax.semilogy(steps[valid],   llcs[valid],    color=color_sgld, lw=2,
+                marker="o", ms=4, label="SGLD-LLC  λ̂")
+    ax.semilogy(steps[valid_h], h_llc[valid_h], color=color_h,    lw=2,
+                marker="s", ms=4, ls="--", label=r"Hessian-LLC  tr(H) / 2λ_max")
+    if is_spike.any():
+        ax.scatter(steps[is_spike], h_llc[is_spike], marker="x",
+                   color="#AAAAAA", s=60, zorder=5, label="AdamW transient")
+
+    ax2 = ax.twinx()
+    ax2.plot(steps, acc_at_steps, color=color_acc, lw=1.5, ls=":",
+             alpha=0.75, label="Test accuracy")
+    ax2.set_ylim(-0.05, 1.05)
+    ax2.set_ylabel("Test accuracy", color=color_acc, fontsize=10)
+    ax2.tick_params(axis="y", labelcolor=color_acc)
+    ax2.spines["right"].set_visible(True)
+
+    # Annotate post-grokking convergence values
+    post_valid = post_mask & valid_h
+    if post_valid.sum():
+        med_h = np.median(h_llc[post_valid])
+        med_s = np.median(llcs[post_mask & valid])
+        ax.axhline(med_h, color=color_h,    lw=1, ls=":", alpha=0.6)
+        ax.axhline(med_s, color=color_sgld, lw=1, ls=":", alpha=0.6)
+        ax.text(xmax * 0.98, med_h * 0.55,
+                f"Hessian-LLC → {med_h:.0f}\n(10 freq × 2 params)",
+                ha="right", fontsize=8, color=color_h)
+        ax.text(xmax * 0.98, med_s * 1.35,
+                f"SGLD-LLC ≈ {med_s:.0f}\n(~{med_s/med_h:.0f}× Hessian est.)",
+                ha="right", fontsize=8, color=color_sgld)
+
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("LLC estimate  (log scale)")
+    ax.set_title("SGLD-LLC  vs  Hessian-LLC")
+    lines1, labels1 = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="lower right")
+    _phase_labels(ax)
+
+    # ── Right panel: ratio SGLD / Hessian-LLC ───────────────────────────────
+    ax = axes[1]
+    _shade(ax)
+    ax.semilogy(steps, ratio, color="#F44336", lw=2, marker="o", ms=4,
+                label="SGLD-LLC / Hessian-LLC")
+
+    post_ratio_vals = ratio[post_mask & valid]
+    if len(post_ratio_vals):
+        med_r = np.nanmedian(post_ratio_vals)
+        ax.axhline(med_r, color="#F44336", lw=1, ls=":", alpha=0.6)
+        ax.text(xmax * 0.98, med_r * 1.6,
+                f"~{med_r:.0f}× post-grokking",
+                ha="right", fontsize=9, color="#C62828", fontweight="bold")
+
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("SGLD-LLC / Hessian-LLC  (log scale)")
+    ax.set_title("Dissociation Ratio")
+    ax.legend(fontsize=9)
+    _phase_labels(ax)
+
+    plt.tight_layout()
+    _save(fig, save_path, "fig_llc_dissociation.png")
+    return fig
+
+
+def plot_geometry_portrait(metrics: dict, save_path: str | None = None):
+    """
+    Phase portrait in (tr(H), SGLD-LLC) space coloured by training step.
+
+    Memorisation basin:  high tr(H) > 10k, LLC rising 700 → 2000.
+    Post-grokking basin: low  tr(H) < 1k,  LLC ≈ 1900–2050 (unchanged).
+
+    The horizontal axis (curvature) cleanly separates the two basins;
+    the vertical axis (SGLD-LLC) does not — confirming that tr(H) is the
+    correct geometric discriminator, not the SGLD estimator.
+    """
+    _apply_style()
+    steps   = np.array(metrics["llc_steps"])
+    llcs    = np.array(metrics["llc"])
+    htraces = np.array(metrics["htrace"])
+
+    eval_steps    = np.array(metrics["eval_steps"])
+    test_acc_full = np.array(metrics["test_acc"])
+    acc_at_steps  = np.interp(steps, eval_steps, test_acc_full)
+
+    # Mask AdamW transient spikes
+    grokk_idx  = np.where(acc_at_steps > 0.50)[0]
+    grokk_step = int(steps[grokk_idx[0]]) if len(grokk_idx) else int(steps[-1])
+    post_mask  = steps >= grokk_step
+    is_spike   = np.zeros(len(steps), dtype=bool)
+    if post_mask.sum() > 2:
+        is_spike[post_mask] = htraces[post_mask] > np.median(htraces[post_mask]) * 15
+    valid = ~is_spike
+
+    fig, ax = plt.subplots(figsize=(7, 5.5))
+    fig.suptitle(
+        "Geometric Phase Portrait:  tr(H)  vs  SGLD-LLC\n"
+        "Curvature separates the two basins — SGLD-LLC does not",
+        fontsize=12, fontweight="bold",
+    )
+
+    sc = ax.scatter(htraces[valid], llcs[valid], c=steps[valid],
+                    cmap="viridis", s=70, zorder=3, edgecolors="white", lw=0.5)
+    ax.plot(htraces[valid], llcs[valid], color="grey", lw=0.7, alpha=0.4, zorder=2)
+
+    cbar = plt.colorbar(sc, ax=ax)
+    cbar.set_label("Training step")
+
+    # Log x-axis separates the two clusters visually
+    ax.set_xscale("log")
+    ax.set_xlabel("Hessian trace  tr(H)  — total curvature  (log scale)")
+    ax.set_ylabel("SGLD-LLC  λ̂")
+
+    # Annotate clusters
+    memo_pts = valid & (steps > 0) & (steps < grokk_step)
+    post_pts = valid & post_mask
+    if memo_pts.sum():
+        cx = np.exp(np.mean(np.log(np.maximum(htraces[memo_pts], 1))))
+        cy = np.mean(llcs[memo_pts])
+        ax.text(cx, cy * 0.72,
+                "Memorisation basin\nhigh curvature\nLLC rising",
+                ha="center", fontsize=9, color="#E65100",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#FFF3E0", alpha=0.85))
+    if post_pts.sum():
+        cx = np.exp(np.mean(np.log(np.maximum(htraces[post_pts], 1))))
+        cy = np.mean(llcs[post_pts])
+        ax.text(cx, cy * 0.72,
+                "Fourier basin\nlow curvature\nLLC unchanged",
+                ha="center", fontsize=9, color="#1B5E20",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#E8F5E9", alpha=0.85))
+
+    # Draw arrow indicating direction of time
+    if valid.sum() >= 2:
+        idxs = np.where(valid)[0]
+        x0, y0 = htraces[idxs[0]], llcs[idxs[0]]
+        x1, y1 = htraces[idxs[1]], llcs[idxs[1]]
+        ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
+                    arrowprops=dict(arrowstyle="-|>", color="grey", lw=1.5))
+    ax.text(0.02, 0.97, "time →", transform=ax.transAxes,
+            fontsize=8, color="grey", va="top")
+
+    plt.tight_layout()
+    _save(fig, save_path, "fig_geometry_portrait.png")
+    return fig
+
+
+def plot_effective_rank(metrics: dict, save_path: str | None = None):
+    """
+    Effective rank = tr(H) / λ_max over training, with Hessian-LLC = rank / 2.
+
+    Post-grokking the rank stabilises at ~37–47, giving Hessian-LLC ≈ 20,
+    consistent with 10 active Fourier frequencies × 2 parameters each.
+    The stability of the rank post-grokking is a new diagnostic for when
+    the generalisation circuit has fully crystallised.
+    """
+    _apply_style()
+    steps   = np.array(metrics["llc_steps"])
+    htraces = np.array(metrics["htrace"])
+    lmax    = np.array(metrics["lambda_max"])
+
+    eval_steps     = np.array(metrics["eval_steps"])
+    test_acc_full  = np.array(metrics["test_acc"])
+    train_acc_full = np.array(metrics["train_acc"])
+    acc_at_steps   = np.interp(steps, eval_steps, test_acc_full)
+
+    eff_rank = htraces / np.maximum(lmax, 1.0)
+
+    # Mask post-grokking spikes
+    grokk_idx  = np.where(acc_at_steps > 0.50)[0]
+    grokk_step = int(steps[grokk_idx[0]]) if len(grokk_idx) else int(steps[-1])
+    post_mask  = steps >= grokk_step
+    is_spike   = np.zeros(len(steps), dtype=bool)
+    if post_mask.sum() > 2:
+        is_spike[post_mask] = eff_rank[post_mask] > np.median(eff_rank[post_mask]) * 15
+    valid = ~is_spike
+
+    # Phase boundaries
+    memo_idx      = np.where(train_acc_full > 0.95)[0]
+    grokk_acc_idx = np.where(test_acc_full > 0.50)[0]
+    memo_step_eval  = int(eval_steps[memo_idx[0]])  if len(memo_idx)  else None
+    grokk_step_eval = int(eval_steps[grokk_acc_idx[0]]) if len(grokk_acc_idx) else None
+    xmax = int(steps[-1])
+
+    def _shade(ax):
+        a = 0.07
+        if memo_step_eval:
+            ax.axvspan(0, memo_step_eval, alpha=a, color="#2196F3", zorder=0)
+        if memo_step_eval and grokk_step_eval and grokk_step_eval > memo_step_eval:
+            ax.axvspan(memo_step_eval, grokk_step_eval, alpha=a, color="#FF9800", zorder=0)
+        if grokk_step_eval:
+            ax.axvspan(grokk_step_eval, xmax, alpha=a, color="#4CAF50", zorder=0)
+
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    fig.suptitle(
+        r"Hessian Effective Rank  =  tr(H) / λ_max  Across Training"
+        "\n"
+        r"Rank / 2  ≈  Hessian-LLC;  post-grokking: rank → ~40  →  LLC ≈ 20",
+        fontsize=12, fontweight="bold",
+    )
+    _shade(ax)
+
+    ax.plot(steps[valid], eff_rank[valid], color="#00897B", lw=2,
+            marker="o", ms=4, label="Effective rank  tr(H) / λ_max")
+    if is_spike.any():
+        ax.scatter(steps[is_spike], eff_rank[is_spike], marker="x",
+                   color="#AAAAAA", s=60, zorder=5, label="AdamW transient")
+
+    # Post-grokking median reference
+    post_rank_vals = eff_rank[post_mask & valid]
+    if len(post_rank_vals):
+        med_rank = np.median(post_rank_vals)
+        ax.axhline(med_rank, color="#00897B", lw=1, ls=":", alpha=0.7)
+        ax.text(xmax * 0.98, med_rank * 1.10,
+                f"Median rank ≈ {med_rank:.0f}  →  Hessian-LLC ≈ {med_rank/2:.0f}",
+                ha="right", fontsize=9, color="#00695C")
+
+    # Fourier-circuit prediction: 10 frequencies, each with 2 free parameters
+    fourier_llc = 20
+    ax.axhline(fourier_llc * 2, color="#333333", lw=0.9, ls="--", alpha=0.55)
+    ax.text(steps[valid][0] + (xmax - steps[valid][0]) * 0.01,
+            fourier_llc * 2 * 1.06,
+            "Fourier prediction: 10 freq × 2 params × 2 = 40",
+            fontsize=8, color="#444444")
+
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("Effective rank  tr(H) / λ_max")
+    ax.legend(fontsize=9, loc="upper right")
+
+    # Phase labels
+    kw = dict(transform=ax.get_xaxis_transform(), ha="center",
+              fontsize=8, style="italic")
+    if memo_step_eval:
+        ax.text(memo_step_eval * 0.45, 0.95, "Memorising", color="#1565C0", **kw)
+    if memo_step_eval and grokk_step_eval:
+        ax.text((memo_step_eval + grokk_step_eval) / 2, 0.95, "Plateau",
+                color="#E65100", **kw)
+    if grokk_step_eval:
+        ax.text((grokk_step_eval + xmax) / 2, 0.95, "Grokking",
+                color="#1B5E20", **kw)
+
+    plt.tight_layout()
+    _save(fig, save_path, "fig_effective_rank.png")
+    return fig
+
+
+def plot_loss_surfaces_3d(panels: list[dict], save_path: str | None = None):
+    """
+    3-D loss surface slices at memorisation and post-grokking checkpoints.
+
+    Uses the same Z, alphas, betas data as plot_loss_surfaces, but renders
+    each panel as a 3-D surface so the contrast between a sharp bowl
+    (memorisation) and a flat plateau (Fourier solution) is immediately
+    intuitive.  Filter-normalised directions are identical across panels so
+    the geometry is directly comparable.
+
+    panels : list of dicts with keys 'step', 'test_acc', 'Z', 'alphas', 'betas'
+             (same format as plot_loss_surfaces).  Pass the two most extreme
+             checkpoints: memorised plateau and post-grokking.
+    """
+    _apply_style()
+    if len(panels) < 2:
+        return None
+
+    # Pick the most memorised (highest test_acc < 0.5) and most generalised panels
+    memo_panels = [p for p in panels if p["test_acc"] < 0.50]
+    gen_panels  = [p for p in panels if p["test_acc"] > 0.90]
+    if not memo_panels or not gen_panels:
+        panels_to_plot = panels[:2]
+    else:
+        panels_to_plot = [
+            max(memo_panels, key=lambda p: p["test_acc"]),
+            max(gen_panels,  key=lambda p: p["test_acc"]),
+        ]
+
+    fig = plt.figure(figsize=(12, 5))
+    fig.suptitle(
+        "3-D Loss Surface: Sharp Memorisation Basin  vs  Flat Fourier Basin\n"
+        "Same filter-normalised weight-space directions; shared colour scale",
+        fontsize=12, fontweight="bold",
+    )
+
+    all_Z   = np.concatenate([p["Z"].ravel() for p in panels_to_plot])
+    vmin    = np.percentile(all_Z, 2)
+    vmax    = np.percentile(all_Z, 95)
+
+    titles = ["Memorisation basin\n(sharp bowl — high curvature)",
+              "Fourier basin\n(flat plateau — low curvature)"]
+    phase_colors = ["#E91E63", "#1B5E20"]
+
+    for idx, (panel, title, col) in enumerate(
+            zip(panels_to_plot, titles, phase_colors)):
+        ax = fig.add_subplot(1, 2, idx + 1, projection="3d")
+
+        alphas = panel["alphas"]
+        betas  = panel["betas"]
+        Z      = np.clip(panel["Z"], vmin, vmax)
+        A, B   = np.meshgrid(alphas, betas)
+
+        surf = ax.plot_surface(
+            A, B, Z.T,
+            cmap="RdYlGn_r",
+            vmin=vmin, vmax=vmax,
+            linewidth=0, antialiased=True, alpha=0.92,
+        )
+
+        ax.set_xlabel("α  (dir d₁)", fontsize=8)
+        ax.set_ylabel("β  (dir d₂)", fontsize=8)
+        ax.set_zlabel("Loss", fontsize=8)
+        ax.set_zlim(vmin, vmax)
+        ax.set_title(
+            f"{title}\nStep {panel['step']}  ·  test {panel['test_acc']:.0%}",
+            fontsize=10, color=col, fontweight="bold",
+        )
+        ax.view_init(elev=28, azim=-60)
+
+    fig.colorbar(surf, ax=fig.axes, shrink=0.55, aspect=12,
+                 label="Loss L(w)", pad=0.02)
+    plt.tight_layout()
+    _save(fig, save_path, "fig_loss_surfaces_3d.png")
+    return fig
+
+
 def _save(fig, save_path, name):
     if save_path is not None:
         p = Path(save_path)

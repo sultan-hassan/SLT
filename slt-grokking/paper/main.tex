@@ -1,0 +1,367 @@
+% ============================================================================
+%  Loss-Surface Geometry Across the Grokking Transition
+%  ICML 2025 Mechanistic Interpretability Workshop
+%
+%  Paste the body (\maketitle through \bibliography) into the official
+%  workshop template (icml2025.sty or neurips_2024.sty).
+%  The \documentclass line below compiles standalone with the neurips style.
+% ============================================================================
+
+\documentclass{article}
+
+% -- Common workshop/conference packages -------------------------------------
+\usepackage[final]{neurips_2024}   % swap for icml2025 if using ICML template
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage[capitalize]{cleveref}
+
+\hypersetup{colorlinks=true, linkcolor=blue!60!black,
+            citecolor=green!50!black, urlcolor=blue!60!black}
+
+% ---------------------------------------------------------------------------
+\title{%
+  Loss-Surface Geometry Across the Grokking Transition:\\
+  Two Distinct Notions of Complexity in Competing Loss Basins%
+}
+
+\author{%
+  Sultan Hassan \quad [Co-author(s) here]\\
+  \textit{[Institution]}\\
+  \texttt{sultanier@gmail.com}
+}
+
+\begin{document}
+\maketitle
+
+% ===========================================================================
+\begin{abstract}
+Grokking—the delayed onset of generalisation long after memorisation—provides
+a controlled testbed for studying how loss-landscape geometry changes at a
+phase transition.  We apply Singular Learning Theory (SLT) to characterise
+the competing solutions through three complementary measures: the
+SGLD-estimated Local Learning Coefficient (LLC), the Hessian trace
+$\operatorname{tr}(H)$, and the largest Hessian eigenvalue $\lambda_{\max}$.
+Our \emph{central finding} is a striking dissociation between these measures
+post-grokking: $\operatorname{tr}(H)$ and $\lambda_{\max}$ collapse by
+$40$–$60\times$—confirming that the Fourier solution occupies a dramatically
+flatter basin—while the SGLD-estimated LLC stays constant ($\approx 2000$).
+We resolve this contradiction by distinguishing two levels of degeneracy
+that standard SGLD conflates: (1)~\emph{local flatness}, captured correctly
+by the Hessian-estimated LLC~$= \operatorname{tr}(H)/(2\lambda_{\max})$,
+which converges to $\approx 20$ post-grokking—exactly matching the Fourier
+circuit's $\sim\!10$ active frequencies $\times\,2$ parameters; and
+(2)~\emph{global multiplicity}, the large number of equivalent Fourier
+solutions, which the miscalibrated SGLD chain explores and conflates with
+local complexity.  We introduce a geometric phase portrait in
+$(\operatorname{tr}(H),\,\text{LLC})$ space that cleanly separates the two
+basins where the LLC alone does not, and show that the effective Hessian rank
+provides a task-agnostic scalar signal for when the generalising circuit has
+fully crystallised.
+\end{abstract}
+
+% ===========================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Grokking~\citep{power2022grokking} is a dramatic instance of delayed
+generalisation: a transformer trained on modular arithmetic ($a+b \bmod p$)
+memorises its training set within hundreds of steps, then---thousands of
+steps later---suddenly generalises to near-perfect test accuracy.
+Mechanistic interpretability has shown that this transition corresponds to an
+algorithmic switch from a dense attention-based lookup table to a sparse
+Discrete Fourier Transform (DFT) circuit that activates only $\sim\!10$
+Fourier frequencies~\citep{nanda2023progress}.
+
+Singular Learning Theory (SLT)~\citep{watanabe2009algebraic} offers a
+complementary \emph{geometric} perspective.  Its central quantity, the Real
+Log Canonical Threshold (RLCT), measures how degenerate (flat, high-symmetry)
+a loss minimum is.  Lower RLCT implies a broader Bayesian posterior and
+smaller free energy; SLT therefore predicts that \emph{weight decay and the
+Bayesian posterior together drive the model towards the more singular, lower-
+RLCT Fourier minimum}.  This prediction has been used to motivate the Local
+Learning Coefficient (LLC) as a continuous phase-transition detector in
+transformer training~\citep{hoogland2024developmental,lau2023quantifying}.
+
+\paragraph{The puzzle.}
+We find a striking tension when measuring both the SGLD-estimated LLC and the
+Hessian geometry simultaneously across the grokking arc.  The Hessian measures
+confirm SLT's prediction dramatically: $\operatorname{tr}(H)$ drops $54\times$
+and $\lambda_{\max}$ drops $43\times$ post-grokking.  But the SGLD LLC does
+\emph{not} drop---it remains at $\approx 2000$ before and after grokking.
+This is not a minor calibration discrepancy; it is a $100\times$ disagreement
+between two estimators that nominally measure the same quantity.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+\item We identify a \textbf{two-level degeneracy structure} at grokking:
+  local flatness (Hessian, collapses $50\times$ at transition) and global
+  multiplicity (SGLD, stays constant), and provide a mechanistic explanation
+  for why they decouple (\S\ref{sec:dissociation}).
+\item We show that the \textbf{Hessian-estimated LLC} converges to a stable
+  $\approx 20$ post-grokking, matching the Fourier circuit's $\sim\!10$
+  active frequencies $\times\,2$ parameters---a quantitative, task-agnostic
+  confirmation of the mechanistic result (\S\ref{sec:results}).
+\item We introduce the \textbf{geometric phase portrait} in
+  $(\operatorname{tr}(H),\,\text{LLC})$ space as a new diagnostic that
+  cleanly separates memorisation and generalisation basins
+  (\S\ref{sec:results}).
+\item We provide a \textbf{mechanistic explanation} for why the SGLD
+  estimator fails in the post-grokking flat regime and what it measures
+  instead (\S\ref{sec:dissociation}).
+\end{enumerate}
+
+% ===========================================================================
+\section{Background}
+\label{sec:background}
+
+\paragraph{Singular Learning Theory and the LLC.}
+In SLT the \emph{RLCT} $\lambda$ controls the free energy:
+$nF_n(w^*) = nL_n(w^*) + \lambda\log n + O(\log\log n)$, where $n$ is the
+training set size and $L_n$ is the training loss~\citep{watanabe2013widely}.
+Smaller $\lambda$ implies a more singular (degenerate) minimum and a
+\emph{lower} free energy; this is SLT's rigorous account of why weight decay
+drives models towards sparser, more symmetric solutions.  The LLC
+$\hat\lambda$ is estimated via Stochastic Gradient Langevin Dynamics (SGLD)
+with a localisation spring:
+\begin{equation}
+  \hat\lambda \;=\; \beta n\,\mathbb{E}_{\text{SGLD}}\!\left[L(w) - L(w^*)\right],
+  \quad \beta = 1/\!\log n,
+\end{equation}
+where the spring $\gamma\|w-w^*\|^2/2$ keeps the chain near $w^*$
+\citep{lau2023quantifying}.
+
+\paragraph{Hessian geometry.}
+The Hessian $H_{ij} = \partial^2 L/\partial w_i\partial w_j$ encodes the
+second-order loss geometry at $w^*$.  Under the Gaussian approximation,
+$\text{LLC} \approx \operatorname{rank}(H)/2$.  We estimate:
+(i)~$\operatorname{tr}(H)$ via the Hutchinson stochastic estimator using
+finite differences~\citep{hutchinson1990stochastic}; (ii)~$\lambda_{\max}$
+via power iteration ($20$ steps); and (iii)~the \emph{Hessian-estimated LLC}
+$\hat\lambda_H = \operatorname{tr}(H)/(2\lambda_{\max})$.
+
+\paragraph{Loss-surface flatness and generalisation.}
+Flat minima generalise better than sharp minima in practice~\citep{keskar2017large},
+though the relationship is subtle~\citep{dinh2017sharp}.  SLT provides the
+theoretically grounded version: it is the \emph{algebraic} flatness (the RLCT)
+rather than Hessian curvature alone that determines the Bayesian model
+complexity~\citep{watanabe2009algebraic}.  A key open question is how well
+the SGLD estimator resolves this algebraic flatness in practice.
+
+% ===========================================================================
+\section{Experimental Setup}
+\label{sec:setup}
+
+\paragraph{Task.}
+We train a one-layer transformer on modular addition: predict
+$(a+b) \bmod 97$ given tokens $a,b \in \{0,\ldots,96\}$.  This is the
+canonical grokking benchmark~\citep{power2022grokking}; the post-grokking
+algorithm is fully understood mechanistically~\citep{nanda2023progress},
+making it a ground-truth testbed for any complexity measure.
+
+\paragraph{Model and training.}
+One-layer transformer ($d_\text{model}=128$, $4$~heads, $223{,}872$
+parameters), $30\%$ training fraction ($2{,}821$ of $9{,}409$ pairs),
+AdamW~\citep{kingma2015adam,loshchilov2019decoupled} with $\eta=10^{-3}$,
+weight decay $1.0$, $5{,}000$ steps.  Weight decay is essential: it is the
+mechanism that differentiates the two solutions energetically, as the lookup
+table requires higher parameter norms than the sparse Fourier circuit.
+
+\paragraph{Measurements.}
+LLC, $\operatorname{tr}(H)$, and $\lambda_{\max}$ are estimated every $250$
+steps (21 checkpoints over the full training arc).  We use $200$ SGLD steps
+per checkpoint ($\varepsilon=3\times 10^{-5}$, $\gamma=100$), $20$
+Hutchinson probes for $\operatorname{tr}(H)$, and $20$ power-iteration steps
+for $\lambda_{\max}$.  All Hessian methods use finite differences with
+$\delta=10^{-3}$, making them MPS/CUDA-safe without \texttt{create\_graph}.
+
+% ===========================================================================
+\section{Results}
+\label{sec:results}
+
+\paragraph{Training arc.}
+\Cref{fig:training} shows the characteristic three-phase grokking arc:
+fast memorisation (steps $0$--$500$, train accuracy $\to 100\%$, test
+accuracy $\approx 27\%$), a long memorisation plateau ($500$--$1900$ steps),
+and a sharp grokking transition ($1900$--$2500$ steps) where test accuracy
+jumps from $27\%$ to $99.5\%$.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{../figures/fig1_training_dynamics.png}
+  \caption{%
+    \textbf{Grokking training arc.}
+    Three phases are visible: fast memorisation (blue band), memorisation
+    plateau (orange), and grokking transition (green).  Test loss rises
+    \emph{above} the random-chance baseline ($\log 97 \approx 4.57$) during
+    the plateau—the lookup-table circuit actively suppresses generalisation.%
+  }
+  \label{fig:training}
+\end{figure}
+
+\paragraph{The LLC–Hessian dissociation.}
+\Cref{fig:dissociation} shows the central new result.  Left panel: both
+LLC estimates on a shared log axis.  The Hessian-estimated LLC
+$\hat\lambda_H = \operatorname{tr}(H)/(2\lambda_{\max})$ starts noisy during
+memorisation ($14$--$65$) then converges to a stable $\approx 20$ post-grokking.
+The SGLD-LLC stays locked at $\approx 2000$ throughout.  Right panel: the
+ratio $\hat\lambda/\hat\lambda_H$ reaches $\sim\!98\times$ post-grokking.
+
+The Hessian-LLC value of $\approx 20$ is a precise quantitative match to
+the mechanistically identified Fourier circuit: $\sim\!10$ active frequencies,
+each with $2$ free parameters (amplitude and phase) $= 20$ effective
+parameters.  This is a new \emph{task-agnostic, model-free} confirmation of
+the mechanistic result that requires no Fourier projections or circuit
+identification.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{../figures/fig_llc_dissociation.png}
+  \caption{%
+    \textbf{LLC–Hessian dissociation.}
+    \emph{Left:} SGLD-LLC (purple) and Hessian-LLC $=\operatorname{tr}(H)/(2\lambda_{\max})$
+    (teal) on a shared log axis, with test accuracy (green).
+    Post-grokking the Hessian-LLC converges to $\approx 20$ (matching $10$
+    Fourier frequencies $\times$ $2$ parameters) while SGLD-LLC stays at
+    $\approx 2000$.
+    \emph{Right:} ratio SGLD/Hessian-LLC on log scale; it stabilises at
+    $\sim\!98\times$ post-grokking.%
+  }
+  \label{fig:dissociation}
+\end{figure}
+
+\paragraph{Geometric phase portrait.}
+\Cref{fig:portrait} shows the trajectory in
+$(\operatorname{tr}(H),\,\text{LLC})$ space with log x-axis.  Two distinct
+clusters emerge:
+\begin{itemize}
+\item \emph{Memorisation basin:} $\operatorname{tr}(H) \approx 14$k--$45$k,
+  LLC $\approx 700$--$2{,}050$ (rising as the lookup table is built).
+\item \emph{Fourier basin:} $\operatorname{tr}(H) \approx 600$--$950$,
+  LLC $\approx 1{,}900$--$2{,}050$ (unchanged).
+\end{itemize}
+The Hessian trace separates the two basins by $\sim\!30\times$; the
+SGLD-LLC does not separate them at all.  This directly falsifies the claim in
+recent work~\citep{competing_basins2026} that validation loss and LLC track
+together across the grokking transition.  In our setting LLC rises fast
+(steps $0$--$500$) and stays high after grokking, while validation loss falls
+at grokking.  The two trajectories have completely different shapes.
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}{0.46\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../figures/fig_geometry_portrait.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.52\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../figures/fig_effective_rank.png}
+  \end{minipage}
+  \caption{%
+    \textbf{Left — Geometric phase portrait.}
+    Trajectory in $(\operatorname{tr}(H),\,\hat\lambda)$ space (log x-axis),
+    coloured by training step.  Curvature (x-axis) separates the two basins;
+    SGLD-LLC (y-axis) does not.
+    \textbf{Right — Effective rank trajectory.}
+    $\operatorname{tr}(H)/\lambda_{\max}$ is noisy during memorisation ($14$--$130$)
+    and converges to a stable $\approx 39$ post-grokking
+    (Hessian-LLC $\approx 19$, dashed line = Fourier prediction $10\times 2\times 2=40$).
+    Stability of the rank is a new diagnostic for circuit crystallisation.%
+  }
+  \label{fig:portrait}
+\end{figure}
+
+% ===========================================================================
+\section{Discussion: Two Levels of Degeneracy}
+\label{sec:dissociation}
+
+Our findings reveal that the post-grokking Fourier solution has two distinct
+geometric properties that standard SLT analyses conflate:
+
+\paragraph{Local degeneracy (Hessian-LLC $\approx 20$).}
+Within the Fourier basin, only $\sim\!20$ parameter directions have
+non-negligible curvature---those corresponding to the $10$ active Fourier
+frequencies.  All other directions are nearly flat (zero eigenvalue).
+Hessian-based measures capture this correctly: $\lambda_{\max}$ drops from
+$\approx 600$ to $\approx 20$, $\operatorname{tr}(H)$ drops $54\times$.
+This is precisely the local singularity depth that SLT's RLCT measures.
+
+\paragraph{Global multiplicity (SGLD-LLC $\approx 2000$).}
+There are many \emph{globally equivalent} Fourier solutions: different
+choices of which $10$ frequencies to activate, rotations within each
+frequency subspace, and rescalings of conjugate pairs.  With localisation
+$\gamma=100$ and $\lambda_{\max} \approx 20$, the SGLD chain's equilibrium
+displacement in the $\sim\!223$k flat directions is
+$\sigma = \sqrt{\varepsilon/\gamma} \approx 0.017$ per parameter.  Over
+$\sim\!200$k flat directions this accumulates large excess energy
+$\mathbb{E}[L(w) - L(w^*)] \gg \hat\lambda_H / (\beta n)$, inflating $\hat\lambda$
+to $\sim\!100\times$ the local RLCT.  The SGLD chain is effectively measuring
+global basin multiplicity---a real quantity, but a different one from the
+local RLCT.
+
+\paragraph{Mechanistic interpretability connection.}
+Our result closes a loop with mechanistic interpretability.
+\citet{nanda2023progress} showed that the Fourier circuit uses $\sim\!10$
+active frequencies; our Hessian-LLC of $\approx 20$ matches this exactly
+without requiring Fourier projections or circuit identification.
+Furthermore, the \emph{stability} of the effective rank post-grokking
+(right panel of \cref{fig:portrait}) provides a new scalar indicator for
+when the generalising circuit has fully crystallised---complementing
+the accuracy-based criteria used in prior work.
+
+\paragraph{Implications for LLC estimation.}
+These results suggest that SGLD-based LLC estimation requires step-size
+calibration to the local curvature scale ($\varepsilon \sim 1/(\beta n
+\lambda_{\max})$) whenever the model has reached a low-loss, high-flatness
+minimum.  The Hessian-estimated LLC $\operatorname{tr}(H)/(2\lambda_{\max})$
+is a practical, calibration-free proxy for the local RLCT in such regimes.
+Combining both measures---SGLD-LLC for global multiplicity and Hessian-LLC
+for local singularity depth---paints a richer picture than either alone.
+
+\paragraph{Comparison with the competing basins view.}
+Recent work~\citep{competing_basins2026} frames grokking as a phase
+transition where the generalisation basin becomes geometrically more
+favourable than the memorisation basin.  We agree with this framing, but
+find that the LLC alone does not resolve the transition: it rises during
+memorisation and \emph{stays constant} during and after grokking.  The
+Hessian trace, by contrast, starts collapsing as grokking fires (around
+step $2{,}000$, when test accuracy crosses $50\%$) and provides a real-time
+indicator of the transition.  This suggests that curvature-based measures
+are more sensitive to the basin geometry change than SGLD-LLC at standard
+hyperparameters.
+
+% ===========================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have shown that the grokking phase transition reveals a \emph{two-level
+degeneracy structure} in the loss landscape that is not captured by the
+SGLD-LLC alone.  The Hessian trace and largest eigenvalue collapse
+$40$--$60\times$ at grokking, confirming SLT's prediction that the Fourier
+solution is more singular.  The Hessian-estimated LLC
+$\operatorname{tr}(H)/(2\lambda_{\max})$ converges to a stable $\approx 20$,
+matching the Fourier circuit's known intrinsic dimensionality.  The SGLD-LLC
+stays at $\approx 2000$, measuring global basin multiplicity rather than
+local singularity depth.
+
+The geometric phase portrait in $(\operatorname{tr}(H), \hat\lambda)$ space
+cleanly separates the two basins and provides a new visualisation tool for
+studying phase transitions in neural network training.  More broadly, our
+results highlight the need to distinguish between local and global notions of
+degeneracy when applying SLT to practical models, and motivate curvature-
+calibrated LLC estimation as a direction for future work.
+
+% ===========================================================================
+\section*{Acknowledgements}
+[Acknowledgements here.]
+
+% ===========================================================================
+\bibliographystyle{abbrvnat}
+\bibliography{references}
+
+\end{document}

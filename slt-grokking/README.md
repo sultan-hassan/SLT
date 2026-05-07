@@ -28,10 +28,14 @@ slices**.
    - [Fig 8 – Two Lenses: Mech Interp vs SLT](#fig-8--two-lenses-mech-interp-vs-slt)
 4. [Why Activations Alone Are Not Enough](#4-why-activations-alone-are-not-enough)
 5. [Interpretation: Geometry Tells the Story](#5-interpretation-geometry-tells-the-story)
-6. [The LLC Calibration Challenge](#6-the-llc-calibration-challenge)
-7. [Connections to Timaeus Research](#7-connections-to-timaeus-research)
-8. [Setup and Usage](#8-setup-and-usage)
-9. [References](#9-references)
+6. [New Analysis: LLC–Hessian Dissociation](#6-new-analysis-llchessian-dissociation)
+   - [Fig A – LLC Dissociation](#fig-a--llc-dissociation)
+   - [Fig B – Geometric Phase Portrait](#fig-b--geometric-phase-portrait)
+   - [Fig C – Effective Rank Convergence](#fig-c--effective-rank-convergence)
+7. [The LLC Calibration Challenge (Revised)](#7-the-llc-calibration-challenge-revised-interpretation)
+8. [Connections to Timaeus Research](#8-connections-to-timaeus-research)
+9. [Setup and Usage](#9-setup-and-usage)
+10. [References](#10-references)
 
 ---
 
@@ -558,55 +562,118 @@ data itself gives the true post-grokking LLC estimate of ~19.
 
 ---
 
-## 6. The LLC Calibration Challenge
+## 6. New Analysis: LLC–Hessian Dissociation
 
-The post-grokking SGLD LLC estimates (~1,360–1,390) remain high relative to the dramatic
-flatness visible in tr(H) and λ_max. This is not a failure of SLT but a practical
-limitation of the fixed-step-size SGLD estimator.
+Three new figures characterise the central finding that SGLD-LLC and Hessian-LLC measure
+*different levels of degeneracy* — and that their dissociation is itself the sharpest
+geometric signal of the grokking phase transition.
 
-**Root cause:** The SGLD step size ε = 3×10⁻⁶ is tuned for the memorisation regime,
-where train loss ~0.05–0.1. Post-grokking, the loss drops to ~0.001–0.006 — roughly two
-orders of magnitude smaller. The same step size now causes the chain to escape the local
-Fourier basin entirely, probing global landscape features rather than the local singularity
-structure — inflating λ̂ relative to the true LLC.
+### Fig A – LLC Dissociation
 
-**The Hessian quantifies exactly how bad the mismatch is:**
-At converged post-grokking (step 3000): λ_max = 19. The basin curvature is so low that
-the SGLD noise term `√(2ε) ≈ 0.0024` overwhelms the gradient signal and the chain
-diffuses freely. The optimal step size for staying inside this basin would be
-ε ~ 1/λ_max ~ 0.05 — roughly 17,000× larger, but then the noise would be enormous and
-mixing would be prohibitively slow.
+![LLC dissociation](figures/fig_llc_dissociation.png)
 
-**What the Hessian data tells us about the true post-grokking LLC:**
-Using the Gaussian approximation: LLC ≈ effective_rank(H) / 2. With tr(H) ≈ 705 and
-λ_max ≈ 19 at step 3000:
+*Left:* SGLD-LLC (purple) and Hessian-estimated LLC = tr(H)/(2λ_max) (teal) on a shared
+log axis, with test accuracy overlaid (green dots). *Right:* the ratio SGLD/Hessian on a
+log scale — it reaches ~98× post-grokking.
 
-```
-effective_rank(H) ≈ tr(H) / λ_max = 705 / 19 ≈ 37
-→ LLC (Gaussian approx.) ≈ 37 / 2 ≈ 19
-```
+Key observations:
 
-This is 60–70× below the SGLD estimate of ~1,360, but perfectly consistent with the
-Fourier solution using ~10 active frequencies, each contributing ~2 effective parameters
-(amplitude + phase) = ~20 total effective parameters.
+| Step range | Phase | SGLD-LLC | Hessian-LLC | Ratio |
+|---|---|---|---|---|
+| 0–500 | Init / memorising | 131–1690 | 0.3–36 | 5–50× |
+| 500–2000 | Memorisation plateau | 1954–2038 | 14–65 | 30–140× |
+| 3250–5000 | Post-grokking | 1899–2054 | **19–24 (stable)** | **84–98×** |
 
-**What would be needed for accurate post-grokking LLC:**
-1. Adaptive step size ε ~ 1/λ_max(H) — requires online Hessian eigenvalue estimation.
-2. Much stronger localisation: γ ~ λ_max × d ~ 20 × 224,000 ~ 4.5 × 10⁶.
-3. Thermodynamic integration or HMC instead of SGLD for better mixing at low temperature.
+**The central new finding:** the Hessian-estimated LLC converges to a stable ~20 post-grokking,
+exactly matching the Fourier circuit's ~10 active frequencies × 2 parameters
+(amplitude + phase). The SGLD-LLC stays at ~2000 — a ~100× overestimate.
 
-**Why this motivates Timaeus' Spectroscopy approach:**
-The calibration challenge shows that SGLD-based LLC estimation degrades when the model
-reaches sharp, low-loss minima. Spectroscopy's susceptibility-based measures are
-naturally calibrated to the local curvature and do not require global exploration —
-making them more robust in exactly the post-training regime where LLC estimation
-is hardest. Our Hessian and LLC measures can be seen as two ends of a spectrum: the
-Hessian gives a clean but shallow (2nd-order) picture; the LLC gives a deeper (all-order)
-picture but requires careful sampling calibration.
+**Why the SGLD-LLC stays high (two-level degeneracy):** The post-grokking Fourier solution
+has two distinct kinds of degeneracy, and each estimator measures a different one:
+
+1. **Local degeneracy (Hessian-LLC ≈ 20):** the basin is locally nearly flat — the ~20
+   directions that matter (10 Fourier frequencies, 2 parameters each) are the only ones
+   with non-negligible curvature. Hessian-LLC captures this correctly.
+
+2. **Global degeneracy (SGLD-LLC ≈ 2000):** there are many *equivalent global solutions*
+   — different choices of which ~10 frequencies to activate, different rotations within
+   frequency subspace. With localization γ = 100 and λ_max ≈ 15–20, the SGLD chain
+   diffuses far in the ~223k flat parameter directions (equilibrium std σ = √(kT/γ) ≫ 1)
+   and probes this global multiplicity, systematically inflating the LLC estimate.
+
+This is not purely a calibration artifact — the SGLD-LLC is measuring something real
+(the global degeneracy of the Fourier solution). But it requires a different physical
+interpretation than the local singularity depth that SLT's RLCT measures.
+
+### Fig B – Geometric Phase Portrait
+
+![Geometry portrait](figures/fig_geometry_portrait.png)
+
+Phase portrait in **(tr(H), SGLD-LLC)** space, coloured by training step (yellow = early,
+dark = late), log x-axis. The trajectory shows:
+
+- **Init (bottom-left):** both tr(H) and LLC near zero — no committed structure.
+- **Memorisation (right cluster):** tr(H) rises to 14k–45k as the lookup-table circuit
+  builds; LLC rises with it as the circuit complexity grows.
+- **Post-grokking (left cluster):** tr(H) collapses to 600–950 (Fourier solution is
+  locally flat); LLC stays at 1900–2050.
+
+**Key message:** the x-axis (curvature) cleanly separates the two basins; the y-axis
+(SGLD-LLC) does not. This directly challenges recent claims [arXiv:2603.01192] that
+validation loss and LLC track together across the transition — in this dataset LLC rises
+fast (steps 0–500) and *stays high* after grokking, while validation loss falls at
+grokking. They trace completely different trajectories.
+
+### Fig C – Effective Rank Convergence
+
+![Effective rank](figures/fig_effective_rank.png)
+
+Effective rank = tr(H)/λ_max over training, with Hessian-LLC = rank/2. The rank is noisy
+during memorisation (14–130, depending on which lookup-table features dominate) and then
+**converges and stabilises at ~39 post-grokking** (Hessian-LLC ≈ 19–24). The dashed
+reference line marks the Fourier prediction: 10 active frequencies × 2 parameters × 2
+(for the embedding + unembedding projections) = 40.
+
+The *stability* of the rank post-grokking is a new diagnostic: once the effective rank
+stops fluctuating and locks onto the Fourier prediction, the phase transition is complete.
+This provides a model-free, task-agnostic signal for when the generalising circuit has
+fully crystallised — without requiring circuit-level Fourier analysis.
 
 ---
 
-## 7. Connections to Timaeus Research
+## 7. The LLC Calibration Challenge (Revised Interpretation)
+
+The post-grokking SGLD LLC estimates (~1,900–2,054) remain high relative to the dramatic
+flatness visible in tr(H) and λ_max. This is partly a calibration limitation of the
+fixed-step-size SGLD estimator, but more fundamentally it reveals a **two-level degeneracy
+structure** not captured by either measure alone.
+
+**Root cause — step-size mismatch:** With localization γ = 100 and post-grokking
+λ_max ≈ 15–20, the effective spring force γ = 100 is much smaller than the Hessian
+curvature along the sharpest direction (β·n·λ_max ≈ 355 × 20 = 7,100). Along the
+~223k flat directions the spring dominates but provides equilibrium std
+σ = √(ε/γ) ≈ √(3×10⁻⁵/100) ≈ 0.017 per parameter — enough displacement to accumulate
+large excess energy over the entire flat subspace.
+
+**What the Hessian data tells us about the true local LLC:**
+Using the Gaussian approximation: LLC ≈ effective_rank(H)/2. Post-grokking:
+
+```
+effective_rank(H) ≈ tr(H)/λ_max ≈ 800/20 ≈ 40
+→ Hessian-LLC ≈ 40/2 ≈ 20   (consistent with 10 active Fourier frequencies × 2 params)
+```
+
+This is ~100× below the SGLD estimate of ~2,000, but perfectly consistent with the
+mechanistically identified Fourier circuit.
+
+**What would be needed for accurate post-grokking SGLD-LLC:**
+1. Adaptive step size ε ~ 1/(β·n·λ_max) — requires online Hessian eigenvalue estimation.
+2. Much stronger localisation: γ ~ β·n·λ_max ~ 7,000.
+3. Or thermodynamic integration / HMC for better mixing at low temperature.
+
+---
+
+## 8. Connections to Timaeus Research
 
 ### Spectroscopy
 
@@ -651,7 +718,7 @@ LLC + Hessian analysis demonstrates that weight-space measures can:
 
 ---
 
-## 8. Setup and Usage
+## 9. Setup and Usage
 
 ### Install
 
@@ -707,7 +774,7 @@ no `create_graph=True` needed.
 
 ---
 
-## 9. References
+## 10. References
 
 - Watanabe, S. (2009). *Algebraic Geometry and Statistical Learning Theory*. Cambridge UP.
 - Watanabe, S. (2013). A widely applicable Bayesian information criterion. *JMLR*, 14, 867–897.

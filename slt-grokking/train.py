@@ -32,9 +32,13 @@ from src.viz import (
     plot_sgld_diagnostics,
     plot_flatness_trajectory,
     plot_loss_surfaces,
+    plot_loss_surfaces_3d,
     plot_activation_phases,
     plot_two_lenses,
     plot_hessian_phases,
+    plot_llc_dissociation,
+    plot_geometry_portrait,
+    plot_effective_rank,
 )
 
 
@@ -233,6 +237,12 @@ def train(cfg):
         plot_flatness_trajectory(metrics, save_path=str(figures_dir))
         plot_hessian_phases(metrics, save_path=str(figures_dir))
 
+    # ── New paper figures: LLC dissociation, geometry portrait, effective rank ─
+    if metrics["htrace"] and metrics["llc"]:
+        plot_llc_dissociation(metrics,   save_path=str(figures_dir))
+        plot_geometry_portrait(metrics,  save_path=str(figures_dir))
+        plot_effective_rank(metrics,     save_path=str(figures_dir))
+
     # ── Figure 6: 2-D loss surface at 4 training stages ──────────────────────
     if surface_ckpts:
         print("  Computing loss surfaces (this takes ~30 s) ...", flush=True)
@@ -256,6 +266,20 @@ def train(cfg):
             {k: v.to(device) for k, v in surface_ckpts[cfg.steps]["state"].items()}
         )
         plot_loss_surfaces(panels, save_path=str(figures_dir))
+        plot_loss_surfaces_3d(panels, save_path=str(figures_dir))
+
+        # Save surface panel data (Z matrices + metadata) for --replot
+        surface_data = []
+        for p in panels:
+            surface_data.append({
+                "step":     p["step"],
+                "test_acc": p["test_acc"],
+                "Z":        p["Z"].tolist(),
+                "alphas":   p["alphas"].tolist(),
+                "betas":    p["betas"].tolist(),
+            })
+        with open(figures_dir / "surface_data.json", "w") as f:
+            json.dump(surface_data, f)
 
     # ── Figures 7–8: Mech Interp activation PCA ──────────────────────────────
     if len(phase_ckpts) >= 2:
@@ -377,12 +401,53 @@ def parse_args():
                    help="±extent of the loss surface grid (filter-normalised units)")
     p.add_argument("--model_sweep",  action="store_true",
                    help="also run Figure 4 model comparison sweep")
+    p.add_argument("--replot",       action="store_true",
+                   help="reload figures/metrics.json and regenerate all figures without retraining")
     p.add_argument("--seed",         type=int,   default=42)
     return p.parse_args()
 
 
+def replot(figures_dir: Path = Path("figures")):
+    """Reload metrics.json and regenerate all figures that only need metrics."""
+    metrics_path = figures_dir / "metrics.json"
+    if not metrics_path.exists():
+        print(f"ERROR: {metrics_path} not found. Run training first.")
+        return
+    with open(metrics_path) as f:
+        metrics = json.load(f)
+    print(f"Loaded metrics from {metrics_path}")
+    print("Regenerating figures...")
+    plot_training_dynamics(metrics,  save_path=str(figures_dir))
+    plot_llc_trajectory(metrics,     save_path=str(figures_dir))
+    plot_phase_portrait(metrics,     save_path=str(figures_dir))
+    if metrics.get("htrace"):
+        plot_flatness_trajectory(metrics, save_path=str(figures_dir))
+        plot_hessian_phases(metrics,      save_path=str(figures_dir))
+    if metrics.get("htrace") and metrics.get("llc"):
+        plot_llc_dissociation(metrics,  save_path=str(figures_dir))
+        plot_geometry_portrait(metrics, save_path=str(figures_dir))
+        plot_effective_rank(metrics,    save_path=str(figures_dir))
+    surface_path = figures_dir / "surface_data.json"
+    if surface_path.exists():
+        with open(surface_path) as f:
+            raw = json.load(f)
+        surface_panels = [
+            {"step": p["step"], "test_acc": p["test_acc"],
+             "Z": np.array(p["Z"]), "alphas": np.array(p["alphas"]),
+             "betas": np.array(p["betas"])}
+            for p in raw
+        ]
+        plot_loss_surfaces(surface_panels,    save_path=str(figures_dir))
+        plot_loss_surfaces_3d(surface_panels, save_path=str(figures_dir))
+    print(f"Done! Figures saved to {figures_dir}/")
+
+
 if __name__ == "__main__":
     cfg = parse_args()
+
+    if cfg.replot:
+        replot()
+        raise SystemExit(0)
 
     if cfg.quick:
         cfg.p             = 23

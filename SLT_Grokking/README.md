@@ -1,7 +1,7 @@
 # SLT × Grokking — Reproducibility Code
 
 Code to reproduce the three figures in  
-**"Circuit Imprint** paper submitted for review. 
+**"Circuit Imprint"** paper submitted for review. 
 
 ---
 

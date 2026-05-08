@@ -62,6 +62,35 @@ def get_readout_activations(
     return acts, a_vals, b_vals, labels
 
 
+@torch.no_grad()
+def fourier_frequency_amplitudes(model: nn.Module) -> np.ndarray:
+    """
+    Compute the Fourier frequency amplitudes of the token embedding matrix.
+
+    For modular arithmetic (a+b) mod p, the model learns to represent tokens
+    using Fourier features.  Post-grokking, only ~10 frequencies remain active
+    in the embedding (Nanda et al. 2023).  Tracking this over training shows
+    which frequencies emerge and when — a purely mechanistic-interpretability
+    signal that we compare against the SLT Hessian-LLC.
+
+    Returns
+    -------
+    amplitudes : (p//2,) float array
+        Amplitude of each frequency k=1..p//2.  Frequency k is "active" when
+        its amplitude stands significantly above the rest.
+    """
+    p = model.p
+    # Only the first p rows are token embeddings (row p is the readout token)
+    W = model.embed.weight[:p].detach().cpu().float().numpy()   # (p, d_model)
+
+    # DFT along the token axis for each embedding dimension
+    W_hat = np.fft.fft(W, axis=0)  # (p, d_model), complex
+
+    # Amplitude of frequency k = RMS magnitude across all d_model dims, normalised
+    amps = (np.abs(W_hat) ** 2).sum(axis=1) ** 0.5 / p  # (p,)
+    return amps[1 : p // 2 + 1].astype(float)            # (p//2,), drop DC and mirror
+
+
 def pca2d(acts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Mean-centre and project activations to the top-2 PCs.

@@ -157,6 +157,89 @@ def top_eigenvalue(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Per-layer Hessian trace (block-diagonal Hutchinson)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _layer_groups(model: nn.Module) -> dict[str, list[str]]:
+    """
+    Map interpretable component names to their parameter name prefixes.
+    Groups are chosen to align with standard mechanistic-interpretability
+    component decompositions of the transformer.
+    """
+    groups: dict[str, list[str]] = {
+        "Token embed":   [],
+        "Attention":     [],
+        "FFN":           [],
+        "LayerNorm":     [],
+        "Unembedding":   [],
+    }
+    for name, _ in model.named_parameters():
+        if name in ("embed.weight", "pos_embed"):
+            groups["Token embed"].append(name)
+        elif "self_attn" in name:
+            groups["Attention"].append(name)
+        elif "linear" in name:
+            groups["FFN"].append(name)
+        elif "norm" in name:
+            groups["LayerNorm"].append(name)
+        elif name == "head.weight":
+            groups["Unembedding"].append(name)
+    return {k: v for k, v in groups.items() if v}
+
+
+def hessian_trace_per_layer(
+    model: nn.Module,
+    criterion: nn.Module,
+    loader: DataLoader,
+    n_samples: int = 5,
+    delta: float = 1e-3,
+    device: str = "cpu",
+) -> dict[str, float]:
+    """
+    Estimate the Hessian trace for each interpretable parameter group independently.
+
+    Uses a block-diagonal Hutchinson estimator: for each group, probe only
+    the parameters in that group (zero elsewhere).  This gives the trace of
+    the corresponding diagonal block of H, which sums to the full tr(H).
+
+    Returns a dict mapping group names to their trace estimates.
+    """
+    groups = _layer_groups(model)
+
+    # Build {param_name: (flat_offset, flat_end)} index
+    named_params = list(model.named_parameters())
+    offset_map: dict[str, tuple[int, int]] = {}
+    off = 0
+    for pname, p in named_params:
+        offset_map[pname] = (off, off + p.numel())
+        off += p.numel()
+    total_d = off
+
+    w0 = _flat(model)
+    L0 = _full_loss(model, criterion, loader, device)
+    traces: dict[str, float] = {}
+
+    for group_name, pnames in groups.items():
+        estimates = []
+        for _ in range(n_samples):
+            v = torch.zeros(total_d)
+            for pname in pnames:
+                start, end = offset_map[pname]
+                v[start:end] = torch.randn(end - start)
+
+            _load_flat(model, w0 + delta * v)
+            Lp = _full_loss(model, criterion, loader, device)
+            _load_flat(model, w0 - delta * v)
+            Lm = _full_loss(model, criterion, loader, device)
+            estimates.append((Lp + Lm - 2.0 * L0) / (delta ** 2))
+
+        _load_flat(model, w0)
+        traces[group_name] = float(np.mean(estimates))
+
+    return traces
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 2-D loss surface slice
 # ──────────────────────────────────────────────────────────────────────────────
 

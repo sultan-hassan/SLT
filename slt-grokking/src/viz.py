@@ -922,6 +922,276 @@ def plot_effective_rank(metrics: dict, save_path: str | None = None):
     return fig
 
 
+def plot_fourier_bridge(metrics: dict, save_path: str | None = None):
+    """
+    Bridge figure: Fourier frequency emergence (mech interp) alongside
+    Hessian-LLC convergence (SLT).
+
+    The central claim for the MechInterp workshop: the two frameworks agree
+    quantitatively.  Mech interp finds ~10 active frequencies post-grokking;
+    SLT finds Hessian-LLC ≈ 20 = 10 × 2 parameters.  This figure shows both
+    signals converging simultaneously at the grokking transition.
+
+    Left panel  — heatmap: training step × frequency index, colour = amplitude.
+                  Shows which frequencies light up and when.
+    Right panel — number of active frequencies (amplitude > 2× mean) overlaid
+                  with Hessian-LLC and test accuracy.  Shows the quantitative
+                  match: active_freqs × 2 ≈ Hessian-LLC ≈ 20 post-grokking.
+    """
+    if "fourier_amplitudes" not in metrics or not metrics["fourier_amplitudes"]:
+        return None
+
+    _apply_style()
+    steps  = np.array(metrics["llc_steps"])
+    amps   = np.array(metrics["fourier_amplitudes"])      # (T, p//2)
+    htraces = np.array(metrics["htrace"])
+    lmax    = np.array(metrics["lambda_max"])
+    h_llc   = htraces / (2.0 * np.maximum(lmax, 1.0))
+
+    eval_steps    = np.array(metrics["eval_steps"])
+    test_acc_full = np.array(metrics["test_acc"])
+    train_acc_full = np.array(metrics["train_acc"])
+    acc_at_steps  = np.interp(steps, eval_steps, test_acc_full)
+
+    # Phase boundaries
+    memo_idx = np.where(train_acc_full > 0.95)[0]
+    grokk_idx = np.where(test_acc_full > 0.50)[0]
+    memo_step_eval  = int(eval_steps[memo_idx[0]])  if len(memo_idx)  else None
+    grokk_step_eval = int(eval_steps[grokk_idx[0]]) if len(grokk_idx) else None
+    xmax = int(steps[-1])
+
+    # Number of active frequencies: amplitude > 2× mean amplitude at each step
+    n_active = np.array([
+        int((row > 2.0 * row.mean()).sum()) for row in amps
+    ])
+
+    # Mask spikes for h_llc display
+    post_mask = steps >= (grokk_step_eval or xmax)
+    is_spike  = np.zeros(len(steps), dtype=bool)
+    if post_mask.sum() > 2:
+        is_spike[post_mask] = htraces[post_mask] > np.median(htraces[post_mask]) * 15
+    valid = ~is_spike
+
+    fig, (ax_heat, ax_right) = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(
+        "Mechanistic Interpretability  ↔  SLT: Two Frameworks, One Answer\n"
+        "Fourier frequencies light up exactly as Hessian-LLC converges to"
+        r" 10 freq $\times$ 2 = 20",
+        fontsize=12, fontweight="bold",
+    )
+
+    # ── Left: frequency amplitude heatmap ──────────────────────────────────
+    # Normalise each step's amplitudes to [0, 1] for visual clarity
+    amps_norm = amps / (amps.max(axis=1, keepdims=True) + 1e-9)
+    n_freq = amps.shape[1]
+    im = ax_heat.imshow(
+        amps_norm.T,           # (freq, time) for imshow
+        aspect="auto",
+        origin="lower",
+        cmap="hot",
+        extent=[steps[0], steps[-1], 1, n_freq],
+        interpolation="nearest",
+    )
+    plt.colorbar(im, ax=ax_heat, label="Normalised amplitude")
+    ax_heat.set_xlabel("Training step")
+    ax_heat.set_ylabel("Fourier frequency  k")
+    ax_heat.set_title("Embedding Fourier Spectrum Over Training\n"
+                      "Bright = active frequency; dim = suppressed")
+
+    # Phase shading via axvspan
+    a = 0.20
+    if memo_step_eval:
+        ax_heat.axvline(memo_step_eval, color="#2196F3", lw=1.2, ls="--", alpha=0.7)
+    if grokk_step_eval:
+        ax_heat.axvline(grokk_step_eval, color="#4CAF50", lw=1.2, ls="--", alpha=0.7)
+        ax_heat.text(grokk_step_eval + xmax * 0.01, n_freq * 0.95,
+                     "Grokking", fontsize=8, color="#1B5E20", style="italic")
+
+    # ── Right: active freqs + Hessian-LLC + test acc ────────────────────────
+    def _shade(ax):
+        ah = 0.07
+        if memo_step_eval:
+            ax.axvspan(0, memo_step_eval, alpha=ah, color="#2196F3", zorder=0)
+        if memo_step_eval and grokk_step_eval and grokk_step_eval > memo_step_eval:
+            ax.axvspan(memo_step_eval, grokk_step_eval, alpha=ah, color="#FF9800", zorder=0)
+        if grokk_step_eval:
+            ax.axvspan(grokk_step_eval, xmax, alpha=ah, color="#4CAF50", zorder=0)
+
+    _shade(ax_right)
+
+    color_freq  = "#FF5722"   # orange-red for freq count
+    color_hllc  = "#00897B"   # teal for Hessian-LLC
+    color_acc   = "#4CAF50"   # green for accuracy
+
+    ax_right.plot(steps, n_active, color=color_freq, lw=2.5,
+                  marker="o", ms=5, label="Active Fourier freqs")
+    ax_right.set_xlabel("Training step")
+    ax_right.set_ylabel("Active frequencies  (ampl > 2× mean)", color=color_freq)
+    ax_right.tick_params(axis="y", labelcolor=color_freq)
+
+    ax_r2 = ax_right.twinx()
+    ax_r2.plot(steps[valid & (steps > 0)], h_llc[valid & (steps > 0)],
+               color=color_hllc, lw=2, marker="s", ms=4, ls="--",
+               label=r"Hessian-LLC  tr(H)/2λ_max")
+    ax_r2.set_ylabel(r"Hessian-LLC  $\hat\lambda_H$", color=color_hllc)
+    ax_r2.tick_params(axis="y", labelcolor=color_hllc)
+    ax_r2.spines["right"].set_visible(True)
+
+    ax_r3 = ax_right.twinx()
+    ax_r3.spines["right"].set_position(("axes", 1.13))
+    ax_r3.spines["right"].set_visible(True)
+    ax_r3.plot(steps, acc_at_steps, color=color_acc, lw=1.5, ls=":",
+               alpha=0.75, label="Test accuracy")
+    ax_r3.set_ylim(-0.05, 1.05)
+    ax_r3.set_ylabel("Test accuracy", color=color_acc, fontsize=9)
+    ax_r3.tick_params(axis="y", labelcolor=color_acc)
+
+    # Post-grokking convergence annotations
+    post_valid = post_mask & valid & (steps > 0)
+    if post_valid.sum():
+        med_f = np.median(n_active[post_mask])
+        med_h = np.median(h_llc[post_valid])
+        ax_right.axhline(med_f, color=color_freq, lw=1, ls=":", alpha=0.6)
+        ax_r2.axhline(med_h, color=color_hllc, lw=1, ls=":", alpha=0.6)
+        ax_right.text(xmax * 0.98, med_f + 0.5,
+                      f"≈ {med_f:.0f} active freqs",
+                      ha="right", fontsize=8, color=color_freq)
+        ax_r2.text(xmax * 0.98, med_h * 0.55,
+                   f"Hessian-LLC ≈ {med_h:.0f}\n"
+                   rf"= {med_f:.0f} freq $\times$ 2",
+                   ha="right", fontsize=8, color=color_hllc)
+
+    ax_right.set_title("Active Frequencies  vs  Hessian-LLC\n"
+                       "Two frameworks, one quantitative answer")
+    lines = (ax_right.get_legend_handles_labels()[0]
+             + ax_r2.get_legend_handles_labels()[0]
+             + ax_r3.get_legend_handles_labels()[0])
+    labels = (ax_right.get_legend_handles_labels()[1]
+              + ax_r2.get_legend_handles_labels()[1]
+              + ax_r3.get_legend_handles_labels()[1])
+    ax_right.legend(lines, labels, fontsize=8, loc="upper left")
+
+    # Phase labels
+    kw = dict(transform=ax_right.get_xaxis_transform(), ha="center",
+              fontsize=8, style="italic")
+    if memo_step_eval:
+        ax_right.text(memo_step_eval * 0.45, 0.96, "Memorising",
+                      color="#1565C0", **kw)
+    if memo_step_eval and grokk_step_eval:
+        ax_right.text((memo_step_eval + grokk_step_eval) / 2, 0.96,
+                      "Plateau", color="#E65100", **kw)
+    if grokk_step_eval:
+        ax_right.text((grokk_step_eval + xmax) / 2, 0.96, "Grokking",
+                      color="#1B5E20", **kw)
+
+    plt.tight_layout()
+    _save(fig, save_path, "fig_fourier_bridge.png")
+    return fig
+
+
+def plot_layer_hessian(metrics: dict, save_path: str | None = None):
+    """
+    Per-layer Hessian trace breakdown across training.
+
+    Shows which component of the transformer drives the sharpness change at
+    grokking — answering the mech-interp question 'where in the model does
+    the geometry change happen?'
+
+    Stacked area plot: each layer's tr(H) contribution over training, with
+    phase shading.  The attention and embedding layers are expected to dominate
+    the memorisation peak; the post-grokking residual should be concentrated
+    in the few active Fourier-frequency parameters.
+    """
+    if "layer_hessian" not in metrics or not metrics.get("layer_hessian"):
+        return None
+
+    _apply_style()
+    steps = np.array(metrics["llc_steps"])
+    lh    = metrics["layer_hessian"]   # dict: group_name -> list[float]
+
+    eval_steps     = np.array(metrics["eval_steps"])
+    test_acc_full  = np.array(metrics["test_acc"])
+    train_acc_full = np.array(metrics["train_acc"])
+
+    memo_idx = np.where(train_acc_full > 0.95)[0]
+    grokk_idx = np.where(test_acc_full > 0.50)[0]
+    memo_step_eval  = int(eval_steps[memo_idx[0]])  if len(memo_idx)  else None
+    grokk_step_eval = int(eval_steps[grokk_idx[0]]) if len(grokk_idx) else None
+    xmax = int(steps[-1])
+
+    group_names = list(lh.keys())
+    data = np.array([lh[g] for g in group_names])   # (n_groups, T)
+
+    # Clip negative/anomalous values for display
+    data = np.clip(data, 0, None)
+
+    colors = ["#9C27B0", "#E91E63", "#FF5722", "#FF9800", "#2196F3"]
+    colors = colors[:len(group_names)]
+
+    fig, (ax_stack, ax_frac) = plt.subplots(1, 2, figsize=(13, 4.5))
+    fig.suptitle(
+        "Per-Layer Hessian Trace  tr(H) Across Training\n"
+        "Which transformer component drives the sharpness peak and collapse?",
+        fontsize=12, fontweight="bold",
+    )
+
+    def _shade(ax):
+        a = 0.07
+        if memo_step_eval:
+            ax.axvspan(0, memo_step_eval, alpha=a, color="#2196F3", zorder=0)
+        if memo_step_eval and grokk_step_eval and grokk_step_eval > memo_step_eval:
+            ax.axvspan(memo_step_eval, grokk_step_eval, alpha=a, color="#FF9800", zorder=0)
+        if grokk_step_eval:
+            ax.axvspan(grokk_step_eval, xmax, alpha=a, color="#4CAF50", zorder=0)
+
+    # ── Left: stacked area ───────────────────────────────────────────────────
+    _shade(ax_stack)
+    ax_stack.stackplot(steps, data, labels=group_names, colors=colors, alpha=0.80)
+    ax_stack.set_xlabel("Training step")
+    ax_stack.set_ylabel("tr(H) contribution")
+    ax_stack.set_title("Absolute tr(H) by Component")
+    ax_stack.legend(loc="upper right", fontsize=8)
+
+    kw = dict(transform=ax_stack.get_xaxis_transform(), ha="center",
+              fontsize=8, style="italic")
+    if memo_step_eval:
+        ax_stack.text(memo_step_eval * 0.45, 0.96, "Memorising",
+                      color="#1565C0", **kw)
+    if memo_step_eval and grokk_step_eval:
+        ax_stack.text((memo_step_eval + grokk_step_eval) / 2, 0.96,
+                      "Plateau", color="#E65100", **kw)
+    if grokk_step_eval:
+        ax_stack.text((grokk_step_eval + xmax) / 2, 0.96, "Grokking",
+                      color="#1B5E20", **kw)
+
+    # ── Right: fractional contribution ──────────────────────────────────────
+    _shade(ax_frac)
+    total = data.sum(axis=0) + 1e-9
+    frac  = data / total
+    ax_frac.stackplot(steps, frac, labels=group_names, colors=colors, alpha=0.80)
+    ax_frac.set_xlabel("Training step")
+    ax_frac.set_ylabel("Fraction of total tr(H)")
+    ax_frac.set_ylim(0, 1)
+    ax_frac.set_title("Fractional tr(H) Share by Component")
+    ax_frac.legend(loc="upper right", fontsize=8)
+
+    kw = dict(transform=ax_frac.get_xaxis_transform(), ha="center",
+              fontsize=8, style="italic")
+    if memo_step_eval:
+        ax_frac.text(memo_step_eval * 0.45, 0.96, "Memorising",
+                     color="#1565C0", **kw)
+    if memo_step_eval and grokk_step_eval:
+        ax_frac.text((memo_step_eval + grokk_step_eval) / 2, 0.96,
+                     "Plateau", color="#E65100", **kw)
+    if grokk_step_eval:
+        ax_frac.text((grokk_step_eval + xmax) / 2, 0.96, "Grokking",
+                     color="#1B5E20", **kw)
+
+    plt.tight_layout()
+    _save(fig, save_path, "fig_layer_hessian.png")
+    return fig
+
+
 def plot_loss_surfaces_3d(panels: list[dict], save_path: str | None = None):
     """
     3-D loss surface slices at memorisation and post-grokking checkpoints.

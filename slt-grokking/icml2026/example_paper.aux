@@ -1,0 +1,51 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{power2022grokking}
+\citation{nanda2023progress}
+\citation{watanabe2009algebraic}
+\citation{varma2023explaining,hoogland2024developmental}
+\newlabel{sec:intro}{{1}{1}{}{section.1}{}}
+\newlabel{sec:intro@cref}{{[section][1][]1}{[1][1][]1}{}{}{}}
+\citation{watanabe2013widely}
+\citation{hutchinson1990stochastic}
+\citation{power2022grokking}
+\citation{kingma2015adam,loshchilov2019decoupled}
+\citation{varma2023explaining}
+\newlabel{sec:background}{{2}{2}{}{section.2}{}}
+\newlabel{sec:background@cref}{{[section][2][]2}{[1][2][]2}{}{}{}}
+\newlabel{eq:llc}{{1}{2}{}{equation.1}{}}
+\newlabel{eq:llc@cref}{{[equation][1][]1}{[1][2][]2}{}{}{}}
+\newlabel{eq:h-llc}{{2}{2}{}{equation.2}{}}
+\newlabel{eq:h-llc@cref}{{[equation][2][]2}{[1][2][]2}{}{}{}}
+\newlabel{sec:setup}{{3}{2}{}{section.3}{}}
+\newlabel{sec:setup@cref}{{[section][3][]3}{[1][2][]2}{}{}{}}
+\newlabel{sec:results}{{4}{2}{}{section.4}{}}
+\newlabel{sec:results@cref}{{[section][4][]4}{[1][2][]2}{}{}{}}
+\citation{nanda2023progress}
+\citation{competing_basins2026}
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:training}{{1}{3}{\textbf {Three-phase grokking arc.} The three phases—memorisation (blue), plateau (orange), and grokking transition (green)—are annotated consistently across all figures. Training accuracy reaches 100\% early while test accuracy stays near random chance until the abrupt transition. Test loss peaks above the random-chance baseline during the plateau, confirming the lookup-table solution actively suppresses generalisation before the algorithmic switch occurs}{figure.caption.1}{}}
+\newlabel{fig:training@cref}{{[figure][1][]1}{[1][2][]3}{}{}{}}
+\newlabel{sec:discussion}{{5}{3}{}{section.5}{}}
+\newlabel{sec:discussion@cref}{{[section][5][]5}{[1][3][]3}{}{}{}}
+\bibdata{references}
+\bibcite{competing_basins2026}{{1}{2026}{{Author(s) of arXiv:2603.01192}}{{}}}
+\bibcite{hoogland2024developmental}{{2}{2024}{{Hoogland et~al.}}{{Hoogland, Goldman-Wetzler, Akhbardeh, Loeng, and Murfet}}}
+\bibcite{hutchinson1990stochastic}{{3}{1990}{{Hutchinson}}{{}}}
+\bibcite{kingma2015adam}{{4}{2015}{{Kingma \& Ba}}{{Kingma and Ba}}}
+\bibcite{loshchilov2019decoupled}{{5}{2019}{{Loshchilov \& Hutter}}{{Loshchilov and Hutter}}}
+\newlabel{fig:dissociation}{{2}{4}{\textbf {Local flatness and global multiplicity diverge at grokking.} \emph {Left:} SGLD-LLC (purple, sensitive to global multiplicity) and Hessian-estimated LLC $\hat \lambda _H$ (teal, sensitive to local flatness) on a shared log axis, with test accuracy (green dots). Both are high during memorisation; at the grokking transition $\hat \lambda _H$ collapses while SGLD-LLC stays elevated—two orders of magnitude apart post-grokking. The value $\hat \lambda _H\!\approx \!18$ matches the intrinsic dimensionality of the Fourier circuit ($\sim \!12$ frequencies $\times \,2$ parameters). \emph {Right:} Ratio of the two estimators over time. The ratio jumps at the grokking transition and remains elevated—a geometry-based phase detector that requires no labelled test set}{figure.caption.2}{}}
+\newlabel{fig:dissociation@cref}{{[figure][2][]2}{[1][3][]4}{}{}{}}
+\newlabel{sec:conclusion}{{6}{4}{}{section.6}{}}
+\newlabel{sec:conclusion@cref}{{[section][6][]6}{[1][4][]4}{}{}{}}
+\bibcite{nanda2023progress}{{6}{2023}{{Nanda et~al.}}{{Nanda, Lawrence, Chan, MacDougall, and Mahajan}}}
+\bibcite{power2022grokking}{{7}{2022}{{Power et~al.}}{{Power, Bhatt, Bhatt, Gur-Ari, and Nakkiran}}}
+\bibcite{varma2023explaining}{{8}{2023}{{Varma et~al.}}{{Varma, Shah, Kenton, Kr{\'a}mar, and Kumar}}}
+\bibcite{watanabe2009algebraic}{{9}{2009}{{Watanabe}}{{}}}
+\bibcite{watanabe2013widely}{{10}{2013}{{Watanabe}}{{}}}
+\bibstyle{icml2026}
+\newlabel{fig:fourier}{{3}{5}{\textbf {Circuit Imprint: loss-geometry independently recovers the circuit's dimensionality.} \emph {Left:} Token-embedding Fourier spectrum across training (bright = high amplitude). Through the memorisation phase all frequencies are dim and equal; at the grokking transition a small set abruptly activates (vertical green dashed line) while others remain near zero. \emph {Right:} Active frequency count (orange) and $\hat \lambda _H$ (teal) both transition at the same training step and reach consistent values post-grokking. The two signals are derived from entirely different objects (embedding spectrum vs.\ loss-surface curvature) and share no information, yet converge simultaneously}{figure.caption.3}{}}
+\newlabel{fig:fourier@cref}{{[figure][3][]3}{[1][3][]5}{}{}{}}
+\gdef \@abspage@last{5}

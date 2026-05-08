@@ -22,8 +22,8 @@ import torch.nn as nn
 from src.model import ModularTransformer, count_params
 from src.data import make_dataloaders
 from src.llc import estimate_llc
-from src.hessian import hessian_trace, top_eigenvalue, loss_surface_2d
-from src.mechinterp import get_readout_activations, pca2d
+from src.hessian import hessian_trace, top_eigenvalue, loss_surface_2d, hessian_trace_per_layer
+from src.mechinterp import get_readout_activations, pca2d, fourier_frequency_amplitudes
 from src.viz import (
     plot_training_dynamics,
     plot_llc_trajectory,
@@ -39,6 +39,8 @@ from src.viz import (
     plot_llc_dissociation,
     plot_geometry_portrait,
     plot_effective_rank,
+    plot_fourier_bridge,
+    plot_layer_hessian,
 )
 
 
@@ -96,13 +98,15 @@ def train(cfg):
     criterion = nn.CrossEntropyLoss()
 
     metrics = {
-        "eval_steps":   [],
-        "train_loss":   [], "test_loss":   [],
-        "train_acc":    [], "test_acc":    [],
-        "llc_steps":    [],
-        "llc":          [],
-        "htrace":       [],   # Hessian trace  (∑ eigenvalues = total curvature)
-        "lambda_max":   [],   # largest Hessian eigenvalue (sharpest direction)
+        "eval_steps":       [],
+        "train_loss":       [], "test_loss":   [],
+        "train_acc":        [], "test_acc":    [],
+        "llc_steps":        [],
+        "llc":              [],
+        "htrace":           [],   # Hessian trace  (∑ eigenvalues = total curvature)
+        "lambda_max":       [],   # largest Hessian eigenvalue (sharpest direction)
+        "fourier_amplitudes": [], # (p//2,) embedding Fourier amplitudes per LLC step
+        "layer_hessian":    {},   # {group_name: [trace_per_step]}
     }
 
     figures_dir = Path("figures")
@@ -169,7 +173,22 @@ def train(cfg):
                                 delta=cfg.htrace_delta, device=device)
             metrics["htrace"].append(ht)
             metrics["lambda_max"].append(lm)
-            print(f"  tr(H)={ht:.1f}  λ_max={lm:.2f}")
+            print(f"  tr(H)={ht:.1f}  λ_max={lm:.2f}", end="", flush=True)
+
+            # Fourier frequency amplitudes (cheap — no forward passes)
+            fa = fourier_frequency_amplitudes(model)
+            metrics["fourier_amplitudes"].append(fa.tolist())
+
+            # Per-layer Hessian trace
+            layer_traces = hessian_trace_per_layer(
+                model, criterion, train_loader,
+                n_samples=cfg.htrace_samples // 2,
+                delta=cfg.htrace_delta, device=device,
+            )
+            for gname, val in layer_traces.items():
+                metrics["layer_hessian"].setdefault(gname, []).append(val)
+            print(f"  | layers: " +
+                  "  ".join(f"{k}={v:.0f}" for k, v in layer_traces.items()))
 
             if step in {0, cfg.steps // 4, cfg.steps // 2, cfg.steps}:
                 plot_sgld_diagnostics(energies, llc, step, save_path=str(figures_dir))
@@ -242,6 +261,8 @@ def train(cfg):
         plot_llc_dissociation(metrics,   save_path=str(figures_dir))
         plot_geometry_portrait(metrics,  save_path=str(figures_dir))
         plot_effective_rank(metrics,     save_path=str(figures_dir))
+        plot_fourier_bridge(metrics,     save_path=str(figures_dir))
+        plot_layer_hessian(metrics,      save_path=str(figures_dir))
 
     # ── Figure 6: 2-D loss surface at 4 training stages ──────────────────────
     if surface_ckpts:
@@ -427,6 +448,8 @@ def replot(figures_dir: Path = Path("figures")):
         plot_llc_dissociation(metrics,  save_path=str(figures_dir))
         plot_geometry_portrait(metrics, save_path=str(figures_dir))
         plot_effective_rank(metrics,    save_path=str(figures_dir))
+        plot_fourier_bridge(metrics,    save_path=str(figures_dir))
+        plot_layer_hessian(metrics,     save_path=str(figures_dir))
     surface_path = figures_dir / "surface_data.json"
     if surface_path.exists():
         with open(surface_path) as f:

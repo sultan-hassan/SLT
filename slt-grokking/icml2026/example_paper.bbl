@@ -1,0 +1,71 @@
+\begin{thebibliography}{10}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[{Author(s) of arXiv:2603.01192}(2026)]{competing_basins2026}
+{Author(s) of arXiv:2603.01192}.
+\newblock Grokking as a phase transition between competing basins.
+\newblock \emph{arXiv preprint arXiv:2603.01192}, 2026.
+\newblock Substitute actual authors when known.
+
+\bibitem[Hoogland et~al.(2024)Hoogland, Goldman-Wetzler, Akhbardeh, Loeng, and
+  Murfet]{hoogland2024developmental}
+Hoogland, J., Goldman-Wetzler, G., Akhbardeh, E., Loeng, M., and Murfet, D.
+\newblock The developmental landscape of in-context learning.
+\newblock \emph{arXiv preprint arXiv:2402.02364}, 2024.
+
+\bibitem[Hutchinson(1990)]{hutchinson1990stochastic}
+Hutchinson, M.~F.
+\newblock A stochastic estimator of the trace of the influence matrix for
+  {Laplacian} smoothing splines.
+\newblock \emph{Communications in Statistics -- Simulation and Computation},
+  19\penalty0 (2):\penalty0 433--450, 1990.
+
+\bibitem[Kingma \& Ba(2015)Kingma and Ba]{kingma2015adam}
+Kingma, D.~P. and Ba, J.
+\newblock Adam: A method for stochastic optimization.
+\newblock \emph{International Conference on Learning Representations (ICLR)},
+  2015.
+
+\bibitem[Loshchilov \& Hutter(2019)Loshchilov and
+  Hutter]{loshchilov2019decoupled}
+Loshchilov, I. and Hutter, F.
+\newblock Decoupled weight decay regularization.
+\newblock \emph{International Conference on Learning Representations (ICLR)},
+  2019.
+
+\bibitem[Nanda et~al.(2023)Nanda, Lawrence, Chan, MacDougall, and
+  Mahajan]{nanda2023progress}
+Nanda, N., Lawrence, L., Chan, T., MacDougall, T., and Mahajan, D.
+\newblock Progress measures for grokking via mechanistic interpretability.
+\newblock In \emph{International Conference on Learning Representations
+  (ICLR)}, 2023.
+
+\bibitem[Power et~al.(2022)Power, Bhatt, Bhatt, Gur-Ari, and
+  Nakkiran]{power2022grokking}
+Power, A., Bhatt, Y., Bhatt, A., Gur-Ari, G., and Nakkiran, P.
+\newblock Grokking: Generalization beyond overfitting on small algorithmic
+  datasets.
+\newblock \emph{arXiv preprint arXiv:2201.02177}, 2022.
+
+\bibitem[Varma et~al.(2023)Varma, Shah, Kenton, Kr{\'a}mar, and
+  Kumar]{varma2023explaining}
+Varma, V., Shah, R., Kenton, Z., Kr{\'a}mar, J., and Kumar, R.
+\newblock Explaining grokking through circuit efficiency.
+\newblock \emph{arXiv preprint arXiv:2309.02390}, 2023.
+
+\bibitem[Watanabe(2009)]{watanabe2009algebraic}
+Watanabe, S.
+\newblock \emph{Algebraic Geometry and Statistical Learning Theory}.
+\newblock Cambridge University Press, 2009.
+
+\bibitem[Watanabe(2013)]{watanabe2013widely}
+Watanabe, S.
+\newblock A widely applicable {Bayesian} information criterion.
+\newblock \emph{Journal of Machine Learning Research}, 14:\penalty0 867--897,
+  2013.
+
+\end{thebibliography}

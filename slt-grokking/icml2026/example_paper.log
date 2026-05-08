@@ -1,8 +1,8 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.3.8)  8 MAY 2026 00:11
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.3.8)  8 MAY 2026 09:54
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
-**example_paper.tex
+**example_paper
 (./example_paper.tex
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
@@ -631,57 +631,65 @@ Underfull \hbox (badness 4060) in paragraph at lines 123--128
 
 
 
-<../figures/fig1_training_dynamics.png, id=51, 858.0858pt x 286.671pt>
-File: ../figures/fig1_training_dynamics.png Graphic file (type png)
-<use ../figures/fig1_training_dynamics.png>
-Package pdftex.def Info: ../figures/fig1_training_dynamics.png  used on input l
-ine 205.
-(pdftex.def)             Requested size: 487.8225pt x 162.97548pt.
+<../figures/fig1_training.png, id=51, 923.45pt x 328.8285pt>
+File: ../figures/fig1_training.png Graphic file (type png)
+<use ../figures/fig1_training.png>
+Package pdftex.def Info: ../figures/fig1_training.png  used on input line 208.
+(pdftex.def)             Requested size: 487.8225pt x 173.70627pt.
+
+Underfull \vbox (badness 8000) has occurred while \output is active []
+
 
 
 [2]
-<../figures/fig_llc_dissociation.png, id=79, 930.8376pt x 322.3242pt>
-File: ../figures/fig_llc_dissociation.png Graphic file (type png)
-<use ../figures/fig_llc_dissociation.png>
-Package pdftex.def Info: ../figures/fig_llc_dissociation.png  used on input lin
-e 249.
-(pdftex.def)             Requested size: 487.8225pt x 168.92271pt.
-<../figures/fig_fourier_bridge.png, id=81, 1010.3346pt x 357.4956pt>
-File: ../figures/fig_fourier_bridge.png Graphic file (type png)
-<use ../figures/fig_fourier_bridge.png>
-Package pdftex.def Info: ../figures/fig_fourier_bridge.png  used on input line 
-288.
-(pdftex.def)             Requested size: 487.8225pt x 172.61055pt.
+<../figures/fig2_dissociation.png, id=79, 923.45pt x 328.8285pt>
+File: ../figures/fig2_dissociation.png Graphic file (type png)
+<use ../figures/fig2_dissociation.png>
+Package pdftex.def Info: ../figures/fig2_dissociation.png  used on input line 2
+54.
+(pdftex.def)             Requested size: 487.8225pt x 173.70627pt.
+<../figures/fig3_circuit_imprint.png, id=81, 997.326pt x 354.123pt>
+File: ../figures/fig3_circuit_imprint.png Graphic file (type png)
+<use ../figures/fig3_circuit_imprint.png>
+Package pdftex.def Info: ../figures/fig3_circuit_imprint.png  used on input lin
+e 296.
+(pdftex.def)             Requested size: 487.8225pt x 173.21378pt.
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
 
 
 
-Underfull \hbox (badness 2762) in paragraph at lines 334--344
+
+Underfull \hbox (badness 2762) in paragraph at lines 343--353
  \OT1/ptm/b/n/10 (+20) Re-la-tion to the competing-basins pic-ture. \OT1/ptm/m/
 n/10 (+20) Re-cent
  []
 
 
-Underfull \hbox (badness 2503) in paragraph at lines 334--344
+Underfull \hbox (badness 2503) in paragraph at lines 343--353
 \OT1/ptm/m/n/10 (+20) work ([][]Au-thor(s) of arXiv:2603.01192[][], [][]2026[][
 ]) frames
  []
 
 
+Underfull \vbox (badness 10000) has occurred while \output is active []
 
-[3 <../figures/fig1_training_dynamics.png>]
+
+
+[3 <../figures/fig1_training.png>]
 Underfull \vbox (badness 10000) has occurred while \output is active []
 
 
 
 (./example_paper.bbl
 
-[4 <../figures/fig_llc_dissociation.png>])
+[4 <../figures/fig2_dissociation.png>])
 
 
 
 [5
 
- <../figures/fig_fourier_bridge.png>] (./example_paper.aux)
+ <../figures/fig3_circuit_imprint.png>] (./example_paper.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
@@ -690,13 +698,13 @@ Package rerunfilecheck Info: File `example_paper.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 17527 strings out of 473190
- 291185 string characters out of 5715801
- 766274 words of memory out of 5000000
+ 17516 strings out of 473190
+ 291005 string characters out of 5715801
+ 767274 words of memory out of 5000000
  40226 multiletter control sequences out of 15000+600000
- 594280 words of font info for 269 fonts, out of 8000000 for 9000
+ 593841 words of font info for 262 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,11n,79p,1010b,629s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,11n,79p,1007b,629s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb
 ></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb>
 </usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></
@@ -712,7 +720,7 @@ ve/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></usr/local/texlive
 live/2025/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></usr/local/texlive/2025/
 texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/local/texlive/2025/texmf-dist
 /fonts/type1/urw/times/utmri8a.pfb>
-Output written on example_paper.pdf (5 pages, 565790 bytes).
+Output written on example_paper.pdf (5 pages, 814487 bytes).
 PDF statistics:
  182 PDF objects out of 1000 (max. 8388607)
  137 compressed objects within 2 object streams

@@ -12,7 +12,11 @@
       "Bash(.venv/bin/python train.py)",
       "Bash(.venv/bin/python train.py --delayed)",
       "Bash(.venv/bin/python -)",
-      "Bash(.venv/bin/python3 run_demo.py --quick --out ./figures)"
+      "Bash(.venv/bin/python3 run_demo.py --quick --out ./figures)",
+      "Bash(cp /Users/shassan/paper/SLT/SLT_Grokking/figures/fig1_training.png /Users/shassan/paper/SLT/slt-grokking/figures/fig1_training.png)",
+      "Bash(cp /Users/shassan/paper/SLT/SLT_Grokking/figures/fig2_dissociation.png /Users/shassan/paper/SLT/slt-grokking/figures/fig2_dissociation.png)",
+      "Bash(cp /Users/shassan/paper/SLT/SLT_Grokking/figures/fig3_circuit_imprint.png /Users/shassan/paper/SLT/slt-grokking/figures/fig3_circuit_imprint.png)",
+      "Bash(pdflatex -interaction=nonstopmode example_paper)"
     ]
   }
 }

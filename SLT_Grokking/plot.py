@@ -40,10 +40,10 @@ C_HLLC     = "#17A589"   # teal    (Hessian-LLC)
 C_FREQ     = "#D35400"   # orange  (active frequency count)
 C_RATIO    = "#5D6D7E"   # slate
 
-# Phase background shading
-PH_MEM  = "#D6EAF8"   # light blue  — memorisation
-PH_PLAT = "#FEF9E7"   # light yellow — plateau
-PH_GROK = "#D5F5E3"   # light green  — grokking
+# Phase background shading — saturated enough to be visible in print
+PH_MEM  = "#85C1E9"   # medium blue   — memorisation
+PH_PLAT = "#F9E79F"   # medium yellow — plateau
+PH_GROK = "#82E0AA"   # medium green  — grokking
 
 
 # ---------------------------------------------------------------------------
@@ -105,16 +105,16 @@ def detect_transition(runs: list[dict], threshold: float = 0.5) -> tuple[float, 
 def add_phase_shading(ax, mem_end: float, grok_start: float, grok_end: float,
                       xmax: float):
     """Add colour-coded background bands for the three training phases."""
-    ax.axvspan(0,          mem_end,    alpha=0.18, color=PH_MEM,  zorder=0)
-    ax.axvspan(mem_end,    grok_start, alpha=0.18, color=PH_PLAT, zorder=0)
-    ax.axvspan(grok_start, grok_end,   alpha=0.28, color=PH_GROK, zorder=0)
+    ax.axvspan(0,          mem_end,    alpha=0.30, color=PH_MEM,  zorder=0)
+    ax.axvspan(mem_end,    grok_start, alpha=0.30, color=PH_PLAT, zorder=0)
+    ax.axvspan(grok_start, grok_end,   alpha=0.42, color=PH_GROK, zorder=0)
 
 
 def phase_legend_handles():
     return [
-        mpatches.Patch(color=PH_MEM,  alpha=0.7, label="Memorisation"),
-        mpatches.Patch(color=PH_PLAT, alpha=0.7, label="Plateau"),
-        mpatches.Patch(color=PH_GROK, alpha=0.7, label="Grokking"),
+        mpatches.Patch(color=PH_MEM,  alpha=0.85, label="Memorisation"),
+        mpatches.Patch(color=PH_PLAT, alpha=0.85, label="Plateau"),
+        mpatches.Patch(color=PH_GROK, alpha=0.85, label="Grokking"),
     ]
 
 
@@ -152,17 +152,20 @@ def fig_training(runs, figures_dir, phase_steps):
     ax1.axhline(np.log(97), color="gray", linestyle=":", linewidth=1.5,
                 label=f"Random chance (log 97)")
 
+    ax1.set_ylim(bottom=1e-3)
     ax1.set_xlabel("Training step")
     ax1.set_ylabel("Cross-entropy loss")
     ax1.set_title("Loss")
     ax1.legend(loc="upper right")
 
-    # Phase labels
-    ax1.text((mem_end) / 2, ax1.get_ylim()[1] * 0.7,
+    # Phase labels — placed near y-axis top after ylim is set
+    ylo, yhi = ax1.get_ylim()
+    label_y = 10 ** (0.82 * (np.log10(yhi) - np.log10(ylo)) + np.log10(ylo))
+    ax1.text(mem_end / 2, label_y,
              "Memorisation", ha="center", fontsize=11, color="#1A5276", alpha=0.9)
-    ax1.text((mem_end + grok_start) / 2, ax1.get_ylim()[1] * 0.7,
+    ax1.text((mem_end + grok_start) / 2, label_y,
              "Plateau", ha="center", fontsize=11, color="#7D6608", alpha=0.9)
-    ax1.text((grok_start + min(grok_end + 200, xmax)) / 2, ax1.get_ylim()[1] * 0.7,
+    ax1.text((grok_start + min(grok_end + 200, xmax)) / 2, label_y,
              "Grokking", ha="center", fontsize=11, color="#145A32", alpha=0.9)
 
     # — Accuracy panel ———————————————————————————————————————————————————
@@ -235,10 +238,10 @@ def fig_dissociation(runs, figures_dir, phase_steps):
                      mean_hllc + std_hllc,
                      color=C_HLLC, alpha=0.18)
 
-    # Reference line: circuit prediction (~12 freq × 2 params = 24, estimate ≈18)
-    ax1.axhline(18, color=C_HLLC, linestyle=":", linewidth=1.8, alpha=0.7)
-    ax1.text(xmax * 0.97, 18 * 1.25,
-             r"$\hat\lambda_H \approx 18$" + "\n(~12 freq × 2 params)",
+    # Reference line: circuit prediction (~12 freq × 2 params = 24, λ_H ≈ 19)
+    ax1.axhline(19, color=C_HLLC, linestyle=":", linewidth=1.8, alpha=0.7)
+    ax1.text(xmax * 0.97, 19 * 1.35,
+             r"$\hat\lambda_H \approx 19$" + "\n(~12 freq × 2 params)",
              ha="right", fontsize=10.5, color=C_HLLC)
 
     # Test accuracy on secondary axis
@@ -256,7 +259,7 @@ def fig_dissociation(runs, figures_dir, phase_steps):
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles2, labels2 = ax1b.get_legend_handles_labels()
     ax1.legend(handles1 + handles2, labels1 + labels2,
-               loc="upper left", fontsize=11)
+               loc="lower right", fontsize=11)
 
     # — Right: ratio on log scale ─────────────────────────────────────────
     add_phase_shading(ax2, mem_end, grok_start, grok_end, xmax)
@@ -304,7 +307,12 @@ def fig_dissociation(runs, figures_dir, phase_steps):
 
 def fig_circuit_imprint(runs, figures_dir, phase_steps):
     mem_end, grok_start, grok_end = phase_steps
-    steps, amp_matrix = fourier_matrix(runs)          # (n_steps, p//2)
+    # Use a single representative seed for the heatmap — crisper than the mean
+    # (averaging across seeds blurs individual frequency activations).
+    # Mean across seeds is used for all line plots on the right panel.
+    ref_run = runs[0]
+    amp_matrix = np.array(ref_run["fourier_amps"])    # (n_steps, p//2)
+    steps      = np.array(ref_run["steps"])
     _,  mean_hllc, std_hllc = align(runs, "hessian_llc")
     _,  mean_te_acc, _      = align(runs, "test_acc")
 
@@ -343,7 +351,7 @@ def fig_circuit_imprint(runs, figures_dir, phase_steps):
     ax1.set_xlabel("Training step")
     ax1.set_ylabel("Fourier frequency  k")
     ax1.set_title("Token-embedding frequency spectrum\n"
-                  "(bright = high amplitude)")
+                  "(bright = high amplitude; single seed)")
     ax1.legend(loc="upper left", fontsize=11)
 
     # — Right: active freq count + Hessian-LLC ───────────────────────────
@@ -369,7 +377,7 @@ def fig_circuit_imprint(runs, figures_dir, phase_steps):
                       np.maximum(mean_hllc - std_hllc, 0.1),
                       mean_hllc + std_hllc,
                       color=C_HLLC, alpha=0.18)
-    ax2b.axhline(18, color=C_HLLC, linestyle=":", linewidth=1.8, alpha=0.7)
+    ax2b.axhline(19, color=C_HLLC, linestyle=":", linewidth=1.8, alpha=0.7)
     ax2b.set_ylabel(r"Hessian-LLC $\hat\lambda_H$  (log scale)",
                     color=C_HLLC, fontsize=14)
     ax2b.tick_params(axis="y", labelcolor=C_HLLC)
@@ -397,10 +405,10 @@ def fig_circuit_imprint(runs, figures_dir, phase_steps):
     labels = ["Active Fourier freq.",
               r"Hessian-LLC $\hat\lambda_H$",
               "Test accuracy (scaled)"]
-    ax2.legend(lines, labels, loc="center right", fontsize=11)
+    ax2.legend(lines, labels, loc="lower right", fontsize=11)
 
     ax2.set_title("Circuit Imprint: independent signals converge\n"
-                  r"at grokking onset  ($12 \times 2 \approx \hat\lambda_H \approx 18$)")
+                  r"at grokking onset  ($\sim\!12$ freq $\times\,2 \approx 24$; $\hat\lambda_H \approx 19$)")
 
     n = len(runs)
     fig.suptitle(

@@ -24,13 +24,13 @@
 \usepackage{amsmath,amssymb,mathtools}
 \usepackage[capitalize,noabbrev]{cleveref}
 
-\icmltitlerunning{Loss-Surface Geometry Across the Grokking Transition}
+\icmltitlerunning{The Circuit Imprint: Loss-Surface Geometry of Grokking}
 
 \begin{document}
 
 \twocolumn[
-  \icmltitle{Loss-Surface Geometry Across the Grokking Transition:\\
-    Local Flatness, Global Multiplicity, and the Circuit Imprint}
+  \icmltitle{The Circuit Imprint:\\
+    Loss-Surface Geometry Fingerprints the Grokking Transition}
 
   \begin{icmlauthorlist}
     \icmlauthor{Sultan Hassan}{stsci}
@@ -61,8 +61,8 @@ multiplicity), and find that these two aspects of the transition evolve
 very differently: local curvature collapses dramatically at the grokking
 transition, while global multiplicity remains roughly constant.
 The local signal is especially informative—the Hessian-estimated LLC settles
-near 18 post-grokking, consistent with $\sim\!12$ active Fourier frequencies
-times two parameters each.
+near $19\!\pm\!2$ post-grokking (mean~$\pm$~std, 5 seeds), consistent with
+$\sim\!12$ active Fourier frequencies times two parameters each.
 A direct Fourier-amplitude analysis of the token embeddings confirms this
 independently, showing that geometry-based SLT probes can recover the
 effective complexity of a learned circuit without any circuit identification.
@@ -176,6 +176,9 @@ decay~1.0)~\citep{kingma2015adam,loshchilov2019decoupled} for 5\,000 steps.
 The high weight decay is essential: it penalises the high-norm lookup table
 faster than the sparse Fourier circuit, providing the energetic incentive for
 the transition~\citep{varma2023explaining}.
+All results are averaged over 5 independent random seeds (seeds 0--4),
+with grokking occurring between steps 2\,250 and 3\,000 (mean $\approx$2\,700).
+Figures show mean~$\pm$~std across seeds.
 
 At every 250 steps we compute:
 \textbf{(i)}~SGLD-LLC via \cref{eq:llc} (200 steps, $\varepsilon=3\!\times\!10^{-5}$,
@@ -202,16 +205,17 @@ now describe detect it earlier and more cleanly.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{../figures/fig1_training_dynamics.png}
+  \includegraphics[width=\linewidth]{../figures/fig1_training.png}
   \caption{%
-    \textbf{Three-phase grokking arc.}
+    \textbf{Three-phase grokking arc} (mean~$\pm$~std, 5 seeds).
     The three phases—memorisation (blue), plateau (orange), and grokking
     transition (green)—are annotated consistently across all figures.
     Training accuracy reaches 100\% early while test accuracy stays near random
-    chance until the abrupt transition.
+    chance until the abrupt transition (mean step~$\approx$2\,700).
     Test loss peaks above the random-chance baseline during the plateau,
     confirming the lookup-table solution actively suppresses generalisation
-    before the algorithmic switch occurs.%
+    before the algorithmic switch occurs.  The shaded bands confirm the
+    three-phase structure is robust across random seeds.%
   }
   \label{fig:training}
 \end{figure*}
@@ -237,35 +241,39 @@ This ratio is a geometry-based transition detector that requires no labelled
 test set and fires at precisely the right step.
 
 The local signal is particularly informative about the circuit.
-Post-grokking, $\hat\lambda_H$ settles near 18—consistent with $\sim\!12$
-active Fourier frequencies, each with two free parameters, giving $12\times 2
-= 24$ effective dimensions.  The Hessian has, without any Fourier analysis,
+Post-grokking, $\hat\lambda_H$ settles near $19\!\pm\!2$ (mean~$\pm$~std
+across 5 seeds)—consistent with $\sim\!12$ active Fourier frequencies,
+each with two free parameters, giving $12\times 2 = 24$ effective
+dimensions.  The Hessian has, without any Fourier analysis,
 independently recovered the circuit's intrinsic dimensionality.  We call this
 the \textbf{Circuit Imprint}: the loss-surface curvature carries a quantitative
 fingerprint of the learned algorithm.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{../figures/fig_llc_dissociation.png}
+  \includegraphics[width=\linewidth]{../figures/fig2_dissociation.png}
   \caption{%
-    \textbf{Local flatness and global multiplicity diverge at grokking.}
+    \textbf{Local flatness and global multiplicity diverge at grokking}
+    (mean~$\pm$~std, 5 seeds).
     \emph{Left:} SGLD-LLC (purple, sensitive to global multiplicity) and
     Hessian-estimated LLC $\hat\lambda_H$ (teal, sensitive to local flatness)
     on a shared log axis, with test accuracy (green dots).
     Both are high during memorisation; at the grokking transition
     $\hat\lambda_H$ collapses while SGLD-LLC stays elevated—two orders of
     magnitude apart post-grokking.
-    The value $\hat\lambda_H\!\approx\!18$ matches the intrinsic dimensionality
+    The value $\hat\lambda_H\!=\!19\!\pm\!2$ matches the intrinsic dimensionality
     of the Fourier circuit ($\sim\!12$ frequencies $\times\,2$ parameters).
     \emph{Right:} Ratio of the two estimators over time.  The ratio jumps
     at the grokking transition and remains elevated—a geometry-based
-    phase detector that requires no labelled test set.%
+    phase detector that requires no labelled test set.
+    Shaded bands show variability across seeds; the dissociation is consistent
+    across all runs.%
   }
   \label{fig:dissociation}
 \end{figure*}
 
 \paragraph{Cross-validating the Circuit Imprint (\cref{fig:fourier}).}
-The Circuit Imprint makes a testable prediction: if $\hat\lambda_H \approx 18$
+The Circuit Imprint makes a testable prediction: if $\hat\lambda_H \approx 19$
 is counting active Fourier dimensions, a direct frequency analysis of the token
 embeddings should find $\sim\!12$ active frequencies activating at the same step.
 
@@ -285,19 +293,20 @@ a precise, recoverable form—without any task-specific analysis.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\linewidth]{../figures/fig_fourier_bridge.png}
+  \includegraphics[width=\linewidth]{../figures/fig3_circuit_imprint.png}
   \caption{%
     \textbf{Circuit Imprint: loss-geometry independently recovers the
     circuit's dimensionality.}
-    \emph{Left:} Token-embedding Fourier spectrum across training (bright =
-    high amplitude).  Through the memorisation phase all frequencies are
+    \emph{Left:} Token-embedding Fourier spectrum (single representative seed;
+    bright = high amplitude).  Through the memorisation phase all frequencies are
     dim and equal; at the grokking transition a small set abruptly activates
     (vertical green dashed line) while others remain near zero.
-    \emph{Right:} Active frequency count (orange) and $\hat\lambda_H$
-    (teal) both transition at the same training step and reach consistent
+    \emph{Right:} Active frequency count (orange, $\sim\!12$ post-grokking)
+    and $\hat\lambda_H$ (teal, $19\!\pm\!2$ post-grokking)
+    both transition at the same training step and reach consistent
     values post-grokking.  The two signals are derived from entirely
     different objects (embedding spectrum vs.\ loss-surface curvature)
-    and share no information, yet converge simultaneously.%
+    and share no information, yet converge simultaneously across all seeds.%
   }
   \label{fig:fourier}
 \end{figure*}

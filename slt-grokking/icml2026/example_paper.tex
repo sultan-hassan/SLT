@@ -51,21 +51,25 @@ Discrete Fourier Transform (DFT) circuit.
 Singular Learning Theory (SLT) predicts this switch leaves a geometric
 signature in the loss landscape: the Fourier solution should occupy a flatter,
 more degenerate minimum.
-But degeneracy itself is multi-faceted: a minimum can be \emph{locally flat}
-(few constrained parameter directions) or \emph{globally multiply represented}
-(many equivalent solutions scattered in weight space), and different estimators
-are sensitive to each.
-We study both simultaneously across grokking using the Hessian-estimated LLC
-(sensitive to local flatness) and the SGLD-estimated LLC (sensitive to global
-multiplicity), and find that these two aspects of the transition evolve
-very differently: local curvature collapses dramatically at the grokking
-transition, while global multiplicity remains roughly constant.
-The local signal is especially informative—the Hessian-estimated LLC settles
-near $19\!\pm\!2$ post-grokking (mean~$\pm$~std, 5 seeds), consistent with
-$\sim\!12$ active Fourier frequencies times two parameters each.
-A direct Fourier-amplitude analysis of the token embeddings confirms this
-independently, showing that geometry-based SLT probes can recover the
-effective complexity of a learned circuit without any circuit identification.
+But degeneracy is multi-faceted, and different geometric probes reveal
+different aspects of the transition.
+We dissect grokking with three complementary measurements: (i)~the SGLD-estimated
+LLC, sensitive to \emph{global multiplicity}; (ii)~the Hessian trace $\operatorname{tr}(H)$
+and top eigenvalue $\lambda_{\max}$, sensitive to \emph{total local curvature};
+and (iii)~their normalised ratio $\hat\lambda_H = \operatorname{tr}(H)/2\lambda_{\max}$,
+which counts \emph{effective constrained dimensions}.
+Across five independent random seeds, we find: $\operatorname{tr}(H)$ collapses
+$\sim\!4\times$ at the grokking transition while SGLD-LLC is entirely unchanged,
+revealing that grokking is a local-curvature event invisible to the global probe.
+$\operatorname{tr}(H)$ and $\lambda_{\max}$ both collapse at grokking
+($\sim\!4\times$ and $\sim\!3\times$ respectively), so their ratio
+$\hat\lambda_H$ drops only modestly from $\sim\!24$ to $\sim\!20\!\pm\!2$—
+and this post-grokking value precisely fingerprints the Fourier circuit's
+intrinsic dimensionality ($\sim\!11$ active frequencies $\times$ 2 free
+parameters $\approx 20$).
+A direct Fourier-amplitude analysis of the token embeddings confirms this count
+independently, demonstrating that loss-surface geometry recovers circuit complexity
+without any task-specific circuit identification.
 \end{abstract}
 
 % ===========================================================================
@@ -92,39 +96,43 @@ dense lookup table, should be more singular in this sense.  Weight decay
 amplifies this preference, penalising the high-norm lookup table faster than
 the compact Fourier circuit~\citep{varma2023explaining,hoogland2024developmental}.
 
-\paragraph{Two faces of degeneracy.}
-What makes grokking an ideal SLT testbed is that the Fourier solution is
-degenerate in two distinct ways.  First, \emph{local flatness}: at any given
-Fourier solution the landscape is nearly flat in all directions except those
-tied to the active Fourier features—only $\sim\!24$ effective parameter
-directions out of hundreds of thousands are constrained.  Second,
-\emph{global multiplicity}: many equivalent Fourier solutions exist,
-corresponding to different active frequency subsets related by DFT symmetries.
-Different estimators are sensitive to each: the Hessian measures local
-curvature at a single point; the SGLD chain can drift between equivalent
-solutions if its step size is large relative to local curvature, probing
-global multiplicity instead.
+\paragraph{Three geometric faces of grokking.}
+What makes grokking an ideal SLT testbed is that the algorithmic switch
+is encoded in the loss landscape at multiple geometric scales simultaneously.
+\emph{Local curvature}: the Hessian trace $\operatorname{tr}(H)$ measures
+total curvature—the sum of all Hessian eigenvalues.
+The Fourier basin has far less total curvature than the lookup-table basin.
+\emph{Effective dimensionality}: the ratio $\hat\lambda_H = \operatorname{tr}(H)/2\lambda_{\max}$
+normalises by the largest eigenvalue and counts effective constrained directions,
+connecting directly to the circuit's parameter count.
+\emph{Global multiplicity}: many equivalent Fourier solutions exist under DFT
+symmetries, and an SGLD chain with large step size drifts between them rather
+than staying within one, measuring their global count instead of the local geometry.
+These three quantities probe distinct aspects of the same transition and,
+crucially, tell very different stories at grokking.
 
 \paragraph{Questions and contributions.}
-This paper asks: how does each geometric face of the transition evolve?  Which
-carries the cleaner signal of the algorithmic switch?  And can geometry alone
-recover what mechanistic interpretability finds?
+This paper asks: what does each geometric probe reveal about grokking?
+Why do $\operatorname{tr}(H)$ and SGLD-LLC give such different answers?
+And can the geometry alone recover what mechanistic interpretability finds?
 
 \begin{enumerate}
-  \item We show that \textbf{local flatness} (Hessian-estimated LLC) collapses
-    dramatically at the grokking transition and directly fingerprints the
-    Fourier circuit's intrinsic dimensionality—a result we term the
-    \textbf{Circuit Imprint} (\S\ref{sec:results}).
-  \item We show that \textbf{global multiplicity} (SGLD-estimated LLC) remains
-    roughly constant across the transition, and explain why: a miscalibrated
-    SGLD chain drifts between equivalent Fourier solutions rather than
-    staying within one, probing the global count rather than the local
-    geometry (\S\ref{sec:discussion}).
-  \item We provide a direct cross-validation: Fourier-amplitude analysis of the
-    token embeddings and Hessian curvature of the loss surface converge to the
-    same effective dimensionality at the same training step with no shared
-    information—demonstrating that geometry-based SLT probes can serve as
-    a task-agnostic substitute for circuit identification (\S\ref{sec:results}).
+  \item We show that \textbf{total local curvature} $\operatorname{tr}(H)$
+    collapses $\sim\!4\times$ at the grokking transition while
+    \textbf{SGLD-LLC is entirely unchanged}, establishing that grokking is
+    a \emph{local}-curvature event invisible to the global multiplicity probe
+    (\S\ref{sec:results}).
+  \item We show that $\operatorname{tr}(H)$ collapses $\sim\!4\times$ and
+    $\lambda_{\max}$ collapses $\sim\!3\times$ at grokking; their ratio
+    $\hat\lambda_H$ drops only modestly from $\sim\!24$ to $\sim\!20$.
+    This settled value directly fingerprints the Fourier circuit's intrinsic
+    dimensionality—a result we term the \textbf{Circuit Imprint}
+    (\S\ref{sec:results}).
+  \item We cross-validate: Fourier-amplitude analysis of the token embeddings
+    independently finds $\sim\!11$ active frequencies at the same training
+    step, agreeing with $\hat\lambda_H$ despite sharing no information—
+    demonstrating that loss-surface geometry can serve as a task-agnostic
+    substitute for circuit identification (\S\ref{sec:results}).
 \end{enumerate}
 
 % ===========================================================================
@@ -149,21 +157,29 @@ within the local basin and measures local flatness.  If it is large, it may
 drift toward other equivalent minima and measure global multiplicity instead.
 Calibration therefore determines which aspect of the RLCT the chain probes.
 
-\paragraph{Hessian-estimated LLC.}
-The Hessian $H=\nabla^2 L(w^*)$ encodes local curvature directly: large
-eigenvalues mark constrained directions; near-zero eigenvalues mark flat,
-unconstrained ones.  Under the Gaussian approximation,
-$\lambda \approx \operatorname{rank}(H)/2$, motivating:
+\paragraph{Hessian geometry.}
+The Hessian $H=\nabla^2 L(w^*)$ encodes local curvature directly.
+We track three quantities:
 \begin{equation}
-  \hat\lambda_H \;=\; \frac{\operatorname{tr}(H)}{2\,\lambda_{\max}},
+  \operatorname{tr}(H) = \textstyle\sum_i \lambda_i, \quad
+  \lambda_{\max} = \max_i \lambda_i, \quad
+  \hat\lambda_H = \frac{\operatorname{tr}(H)}{2\,\lambda_{\max}}.
   \label{eq:h-llc}
 \end{equation}
-which counts effective non-flat directions divided by two.  We estimate
-$\operatorname{tr}(H)$ via the Hutchinson finite-difference
+$\operatorname{tr}(H)$ is the \emph{total curvature}—a scalar summary of how
+sharp the minimum is overall.  $\lambda_{\max}$ is the sharpest single
+direction.  $\hat\lambda_H$ normalises total curvature by peak curvature and serves as
+an approximation to the effective number of active constrained dimensions:
+under a uniform-eigenvalue approximation it equals $k/2$ where $k$ is the
+number of non-zero eigenvalues, but for the power-law spectra typical of
+neural networks it more directly reflects the count of dominant active
+directions.
+We estimate $\operatorname{tr}(H)$ via the Hutchinson finite-difference
 estimator~\citep{hutchinson1990stochastic} and $\lambda_{\max}$ via power
-iteration—both requiring only forward passes.  Because $\hat\lambda_H$ is
-purely local it measures only local flatness, regardless of how many equivalent
-solutions exist elsewhere in weight space.
+iteration, both using only forward passes.
+These three quantities are complementary: $\operatorname{tr}(H)$ is sensitive
+to overall sharpness changes; $\hat\lambda_H$ is sensitive to \emph{structural}
+changes in which directions are constrained.
 
 % ===========================================================================
 \section{Setup}
@@ -183,7 +199,8 @@ Figures show mean~$\pm$~std across seeds.
 At every 250 steps we compute:
 \textbf{(i)}~SGLD-LLC via \cref{eq:llc} (200 steps, $\varepsilon=3\!\times\!10^{-5}$,
 $\gamma=100$);
-\textbf{(ii)}~$\operatorname{tr}(H)$ and $\lambda_{\max}$ via \cref{eq:h-llc};
+\textbf{(ii)}~$\operatorname{tr}(H)$, $\lambda_{\max}$, and $\hat\lambda_H$ via \cref{eq:h-llc}
+(20 Hutchinson probes, 20 power-iteration steps);
 and \textbf{(iii)}~the token-embedding Fourier amplitude spectrum,
 $A_k = \bigl(\sum_d|\hat{W}_{k,d}|^2\bigr)^{1/2}/p$,
 where $\hat{W}$ is the DFT of $W_E$ along the token axis.
@@ -212,7 +229,8 @@ now describe detect it earlier and more cleanly.
     transition (green)—are annotated consistently across all figures.
     Training accuracy reaches 100\% early while test accuracy stays near random
     chance until the abrupt transition (mean step~$\approx$2\,700).
-    Test loss peaks above the random-chance baseline during the plateau,
+    Loss is in nats; the random-chance baseline is $\ln 97 \approx 4.6$.
+    Test loss peaks above this baseline during the plateau,
     confirming the lookup-table solution actively suppresses generalisation
     before the algorithmic switch occurs.  The shaded bands confirm the
     three-phase structure is robust across random seeds.%
@@ -220,62 +238,84 @@ now describe detect it earlier and more cleanly.
   \label{fig:training}
 \end{figure*}
 
-\paragraph{Local and global geometry diverge at grokking (\cref{fig:dissociation}).}
-\Cref{fig:dissociation} shows both probes across training.
-During memorisation both estimators are high—the lookup-table basin is complex
-and sharp.  At the grokking transition the two measures sharply diverge:
-$\hat\lambda_H$ collapses to a much lower value and stabilises, confirming that
-the Fourier basin is dramatically flatter.  The SGLD-LLC barely changes.
-Post-grokking the two sit roughly two orders of magnitude apart on a log scale.
+\paragraph{Total curvature collapses at grokking; global multiplicity does not
+(\cref{fig:dissociation}).}
+\Cref{fig:dissociation} shows raw absolute values of $\operatorname{tr}(H)$
+(left axis, log scale) and SGLD-LLC (right axis, log scale).
+After an initial rise, SGLD-LLC stabilises at $\sim\!1{,}900$ by
+step~$\sim\!1{,}000$ and \emph{does not change at the grokking
+transition}—the global-multiplicity probe is entirely blind to the
+algorithmic switch.
+In sharp contrast, the Hessian trace $\operatorname{tr}(H)$ rises during the
+memorisation phase as the model builds a high-curvature lookup-table basin,
+then \textbf{collapses $\sim\!4.1\times$} as the Fourier algorithm replaces it
+($\operatorname{tr}(H)$ drops from $\sim\!52{,}000$ during the plateau to
+$\sim\!12{,}500$ post-grokking, mean across 5 seeds).
+SGLD-LLC is insensitive because global multiplicity—the number of equivalent
+Fourier solutions related by DFT symmetries—is similar before and after grokking;
+only the local curvature of each basin changes.
 
-This divergence is informative, not contradictory.  The Hessian reports on the
-local geometry of whichever Fourier solution the model landed in.  The SGLD
-chain, with a step size large relative to the post-grokking curvature, drifts
-between many equivalent Fourier solutions and reports their global count.
-Both signals are real; they characterise different geometric aspects of the
-same transition.
+\paragraph{The Circuit Imprint: $\hat\lambda_H$ settles at the circuit's
+dimensionality (\cref{fig:fourier}).}
+$\lambda_{\max}$ also collapses at grokking, but by a somewhat smaller factor
+($\sim\!2.8\times$, from $\sim\!1{,}150$ to $\sim\!410$).
+Because $\operatorname{tr}(H)$ and $\lambda_{\max}$ do not collapse by
+\emph{exactly} the same factor, their ratio
+$\hat\lambda_H = \operatorname{tr}(H)/2\lambda_{\max}$ is not fully preserved:
+it drops modestly from $\sim\!24$ during the plateau to $\sim\!20\!\pm\!2$
+post-grokking—a $\sim\!1.2\times$ decrease, far smaller than either component's
+collapse.
+Crucially, the post-grokking value is highly informative: $\hat\lambda_H$
+counts effective constrained directions, and $\hat\lambda_H \approx 20
+\approx 11\text{ active frequencies} \times 2\text{ free parameters}$
+(within the uniform-eigenvalue approximation of the estimator).
+The Hessian has, without any Fourier analysis, recovered the Fourier circuit's
+intrinsic dimensionality.  We call this the \textbf{Circuit Imprint}:
+the loss-surface curvature encodes a quantitative fingerprint of the learned
+algorithm, readable from the geometry alone.
 
-The right panel shows the ratio of the two over time: modest during
-memorisation, jumping sharply at grokking onset and remaining elevated.
-This ratio is a geometry-based transition detector that requires no labelled
-test set and fires at precisely the right step.
-
-The local signal is particularly informative about the circuit.
-Post-grokking, $\hat\lambda_H$ settles near $19\!\pm\!2$ (mean~$\pm$~std
-across 5 seeds)—consistent with $\sim\!12$ active Fourier frequencies,
-each with two free parameters, giving $12\times 2 = 24$ effective
-dimensions.  The Hessian has, without any Fourier analysis,
-independently recovered the circuit's intrinsic dimensionality.  We call this
-the \textbf{Circuit Imprint}: the loss-surface curvature carries a quantitative
-fingerprint of the learned algorithm.
-
-\begin{figure*}[t]
+\begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{../figures/fig2_dissociation.png}
+  \includegraphics[width=1.1\columnwidth]{../figures/fig2_dissociation.png}
   \caption{%
-    \textbf{Local flatness and global multiplicity diverge at grokking}
-    (mean~$\pm$~std, 5 seeds).
-    \emph{Left:} SGLD-LLC (purple, sensitive to global multiplicity) and
-    Hessian-estimated LLC $\hat\lambda_H$ (teal, sensitive to local flatness)
-    on a shared log axis, with test accuracy (green dots).
-    Both are high during memorisation; at the grokking transition
-    $\hat\lambda_H$ collapses while SGLD-LLC stays elevated—two orders of
-    magnitude apart post-grokking.
-    The value $\hat\lambda_H\!=\!19\!\pm\!2$ matches the intrinsic dimensionality
-    of the Fourier circuit ($\sim\!12$ frequencies $\times\,2$ parameters).
-    \emph{Right:} Ratio of the two estimators over time.  The ratio jumps
-    at the grokking transition and remains elevated—a geometry-based
-    phase detector that requires no labelled test set.
-    Shaded bands show variability across seeds; the dissociation is consistent
-    across all runs.%
+    \textbf{Total curvature collapses at grokking; global multiplicity does not}
+    (mean~$\pm$~std, 5 seeds; both axes log scale).
+    \emph{Left axis (blue):} Hessian trace $\operatorname{tr}(H)$ rises during
+    memorisation, then collapses $\sim\!4.1\times$ at grokking—from
+    $\sim\!52{,}000$ (plateau) to $\sim\!12{,}500$ (post-grokking).
+    \emph{Right axis (purple):} SGLD-LLC rises to $\sim\!1{,}900$ during
+    the memorisation phase, then remains flat from the plateau through and
+    beyond the grokking transition.
+    The two probes diverge sharply at grokking because they measure different
+    properties: $\operatorname{tr}(H)$ captures local basin curvature, which
+    changes dramatically; SGLD-LLC captures global multiplicity, which does not.%
   }
   \label{fig:dissociation}
+\end{figure}
+\begin{figure*}[thb]
+  \centering
+  \includegraphics[width=\linewidth]{../figures/fig3_circuit_imprint.png}
+  \caption{%
+    \textbf{Circuit Imprint: loss-geometry independently recovers the
+    circuit's dimensionality.}
+    \emph{Left:} Token-embedding Fourier spectrum (single representative seed;
+    bright = high amplitude).  Through the memorisation phase all frequencies are
+    dim and equal; at the grokking transition a small set abruptly activates
+    (vertical green dashed line) while others remain near zero.
+    \emph{Right:} Active frequency count (orange, $\sim\!11$ post-grokking)
+    and $\hat\lambda_H$ (teal, $20\!\pm\!2$ post-grokking)
+    both transition at the same training step and reach consistent
+    values post-grokking.  The two signals are derived from entirely
+    different objects (embedding spectrum vs.\ loss-surface curvature)
+    and share no information, yet converge simultaneously across all seeds.%
+  }
+  \label{fig:fourier}
 \end{figure*}
 
 \paragraph{Cross-validating the Circuit Imprint (\cref{fig:fourier}).}
-The Circuit Imprint makes a testable prediction: if $\hat\lambda_H \approx 19$
+The Circuit Imprint makes a testable prediction: if $\hat\lambda_H \approx 20$
 is counting active Fourier dimensions, a direct frequency analysis of the token
-embeddings should find $\sim\!12$ active frequencies activating at the same step.
+embeddings should find $\sim\!11$ active frequencies activating at the same step.
 
 The left panel shows the Fourier spectrum of $W_E$ as a heatmap.  Early in
 training and through the plateau all frequencies have low, equal amplitude—
@@ -291,41 +331,42 @@ nothing about the circuit structure.  Their simultaneous convergence confirms
 that loss-surface curvature encodes the circuit's intrinsic dimensionality in
 a precise, recoverable form—without any task-specific analysis.
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\linewidth]{../figures/fig3_circuit_imprint.png}
-  \caption{%
-    \textbf{Circuit Imprint: loss-geometry independently recovers the
-    circuit's dimensionality.}
-    \emph{Left:} Token-embedding Fourier spectrum (single representative seed;
-    bright = high amplitude).  Through the memorisation phase all frequencies are
-    dim and equal; at the grokking transition a small set abruptly activates
-    (vertical green dashed line) while others remain near zero.
-    \emph{Right:} Active frequency count (orange, $\sim\!12$ post-grokking)
-    and $\hat\lambda_H$ (teal, $19\!\pm\!2$ post-grokking)
-    both transition at the same training step and reach consistent
-    values post-grokking.  The two signals are derived from entirely
-    different objects (embedding spectrum vs.\ loss-surface curvature)
-    and share no information, yet converge simultaneously across all seeds.%
-  }
-  \label{fig:fourier}
-\end{figure*}
 
 % ===========================================================================
 \section{Discussion}
 \label{sec:discussion}
 
-\paragraph{Understanding the SGLD-LLC signal.}
-The SGLD-LLC staying high post-grokking is not a failure—it is measuring
-something real.  The Fourier solution has high \emph{global multiplicity}:
-many equivalent solutions exist, corresponding to different active frequency
-subsets and phase rotations, all related by the symmetries of the DFT.
-With the step size used here, the SGLD chain drifts across the vast flat
-subspace and moves between these equivalent solutions, accumulating excess loss
-and yielding a high $\hat\lambda$.  A step size tuned to the post-grokking
-curvature would confine the chain to a single solution and bring the SGLD-LLC
-in line with $\hat\lambda_H$.  The two estimators are not in conflict—they are
-instruments calibrated to different geometric scales.
+\paragraph{Why SGLD-LLC is blind to grokking.}
+The SGLD-LLC not changing at grokking is not a failure—it reflects a
+genuine property of the solution space.
+Both the lookup-table and the Fourier algorithm have high global multiplicity:
+lookup tables can be rearranged by permuting attention heads; Fourier solutions
+come in families parameterised by different active frequency subsets and phase
+rotations, all related by DFT symmetries.
+With the step size used here, the SGLD chain drifts between these equivalent
+solutions regardless of which algorithm the model currently uses, reporting a
+global count that is approximately the same on both sides of the transition.
+The \emph{local} geometry of individual basins changes dramatically at grokking
+(as $\operatorname{tr}(H)$ shows), but that signal is invisible at the SGLD's
+step size.
+
+\paragraph{Why $\hat\lambda_H$ drops less than $\operatorname{tr}(H)$.}
+$\operatorname{tr}(H)$ and $\lambda_{\max}$ both collapse at grokking but
+by different factors ($\sim\!4.1\times$ and $\sim\!2.8\times$ respectively).
+This concurrent but unequal collapse means $\hat\lambda_H = \operatorname{tr}(H)/2\lambda_{\max}$
+decreases by only $\sim\!1.2\times$ (from $\sim\!24$ to $\sim\!20$)—the
+larger drop in $\operatorname{tr}(H)$ is partially cancelled by the drop in
+$\lambda_{\max}$.
+Intuitively, the Hessian spectrum is partially rescaled at grokking: each
+active direction becomes less sharp (hence the drop in both $\operatorname{tr}(H)$
+and $\lambda_{\max}$), but there is also a mild reduction in the number of
+active constrained directions (hence the modest drop in $\hat\lambda_H$ from
+$\sim\!24$ to $\sim\!20$).
+Under the lookup-table solution the active directions span the dense attention
+parameters; under the Fourier solution they compress to approximately
+$\sim\!11\times 2 \approx 20$ constrained directions of the active frequencies—each
+now constrained with lower absolute curvature because the Fourier basin is
+intrinsically flatter.
 
 \paragraph{The Circuit Imprint as a task-agnostic probe.}
 Mechanistic interpretability identifies the Fourier circuit through
@@ -342,40 +383,46 @@ $\hat\lambda_H$ may serve as a practical substitute.
 \paragraph{Relation to the competing-basins picture.}
 Recent work~\citep{competing_basins2026} frames grokking as a phase transition
 between two geometrically distinct basins, tracking the LLC as a continuous
-transition detector.  Our results refine this picture.  The SGLD-LLC alone
-does not cleanly separate the two basins: it rises during memorisation but
-does not drop post-grokking.  Local curvature, by contrast, begins collapsing
-\emph{during} the grokking transition itself, providing an earlier signal.
-When both probes are available, the trajectory in (Hessian curvature, LLC)
-space traces a clean path between two well-separated clusters—one for the
-memorisation basin and one for the Fourier basin—with the curvature axis
-carrying most of the discriminating power.
+transition detector.  Our results sharpen this picture.
+The SGLD-LLC alone does not separate the two basins: it is equally high on
+both sides of the transition.
+$\operatorname{tr}(H)$, by contrast, cleanly marks the transition with a
+$\sim\!4\times$ drop, providing an early, threshold-free detector that
+requires no test-set labels.
+A full geometric characterisation of the transition requires both probes:
+SGLD-LLC measures the symmetry group of the solution (preserved through
+grokking); $\operatorname{tr}(H)$ measures the sharpness of individual basins
+(which changes).
 
 % ===========================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 
-Grokking turns out to expose two distinct faces of degeneracy in the loss
-landscape.  The Fourier basin is locally flat: almost all parameter directions
-are unconstrained, and the few that carry curvature quantitatively fingerprint
-the active Fourier circuit—the Circuit Imprint.  It is also globally multiple:
-many equivalent Fourier solutions exist, and a miscalibrated SGLD chain
-explores them rather than characterising any single one.
+Grokking exposes three distinct geometric signatures in the loss landscape,
+and the three tell surprisingly different stories.
+The Hessian trace $\operatorname{tr}(H)$ collapses $\sim\!4\times$ at the
+grokking transition—the clearest, most direct signal of the algorithmic switch,
+robust across all five random seeds.
+$\lambda_{\max}$ collapses $\sim\!3\times$; their ratio $\hat\lambda_H$ drops
+only modestly from $\sim\!24$ to $\sim\!20$, and this settled post-grokking
+value encodes the Fourier circuit's intrinsic dimensionality as a geometric
+fingerprint—the Circuit Imprint.
+SGLD-LLC, by contrast, is entirely unchanged at grokking: it measures global
+multiplicity, which is similar for lookup-table and Fourier solutions alike.
 
-These two faces are not in conflict; they reflect genuinely different geometric
-properties of the solution.  But they have different practical implications.
-Local flatness, probed by the Hessian-estimated LLC, tracks the algorithmic
-switch cleanly, recovers the circuit's intrinsic dimensionality without circuit
-identification, and is confirmed independently by Fourier-amplitude analysis
-of the token embeddings.  Global multiplicity, probed by the SGLD-LLC, reflects
-the symmetry group of the Fourier solution—real and theoretically interesting,
-but insensitive to the transition itself at standard step sizes.
+These three quantities are not in conflict.  They probe genuinely different
+aspects of the same transition: total sharpness ($\operatorname{tr}(H)$),
+effective dimensionality ($\hat\lambda_H$), and symmetry group (SGLD-LLC).
+All three are real; knowing which probe is appropriate for a given question
+is the practical takeaway.
 
-Together, these results suggest that decomposing the RLCT into its local and
-global components is a productive lens for studying phase transitions in
-trained models—and that loss-landscape curvature can serve as a task-agnostic
-proxy for circuit complexity in settings where mechanistic identification is
-costly or unavailable.
+The broader implication is that $\operatorname{tr}(H)$ is a powerful,
+underutilised transition detector—cheaper than full LLC estimation and more
+sensitive to the algorithmic switch.  Combined with $\hat\lambda_H$ as a
+circuit-complexity estimator and Fourier-amplitude analysis as an independent
+cross-check, these results suggest that loss-landscape geometry can serve as
+a task-agnostic proxy for circuit identification in settings where mechanistic
+analysis is costly or unavailable.
 
 % ===========================================================================
 \section*{Impact Statement}

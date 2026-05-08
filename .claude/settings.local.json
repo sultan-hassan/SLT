@@ -16,7 +16,17 @@
       "Bash(cp /Users/shassan/paper/SLT/SLT_Grokking/figures/fig1_training.png /Users/shassan/paper/SLT/slt-grokking/figures/fig1_training.png)",
       "Bash(cp /Users/shassan/paper/SLT/SLT_Grokking/figures/fig2_dissociation.png /Users/shassan/paper/SLT/slt-grokking/figures/fig2_dissociation.png)",
       "Bash(cp /Users/shassan/paper/SLT/SLT_Grokking/figures/fig3_circuit_imprint.png /Users/shassan/paper/SLT/slt-grokking/figures/fig3_circuit_imprint.png)",
-      "Bash(pdflatex -interaction=nonstopmode example_paper)"
+      "Bash(pdflatex -interaction=nonstopmode example_paper)",
+      "Bash(python plot.py)",
+      "Bash(python3 plot.py)",
+      "Bash(conda info *)",
+      "Bash(uv run *)",
+      "Bash(pdflatex -interaction=nonstopmode example_paper.tex)",
+      "Bash(grep -n \"12\\\\|24 param\\\\|24 eff\\\\| 24$\" /Users/shassan/paper/SLT/slt-grokking/icml2026/example_paper.tex)",
+      "Read(//tmp/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/shassan/paper/slt-grokking"
     ]
   }
 }

@@ -15,8 +15,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.lines import Line2D
+import matplotlib.patheffects as pe
 
 matplotlib.rcParams.update({
     "font.family":      "sans-serif",
@@ -25,7 +24,7 @@ matplotlib.rcParams.update({
     "axes.titlesize":   15,
     "xtick.labelsize":  13,
     "ytick.labelsize":  13,
-    "legend.fontsize":  12,
+    "legend.fontsize":  11,
     "legend.framealpha": 0.85,
     "lines.linewidth":  2.2,
     "axes.spines.top":  False,
@@ -33,14 +32,14 @@ matplotlib.rcParams.update({
 })
 
 # ── colour palette ────────────────────────────────────────────────────────────
-C_TRAIN    = "#2471A3"   # blue
-C_TEST     = "#C0392B"   # red
-C_LLC      = "#7D3C98"   # purple  (SGLD-LLC)
-C_HLLC     = "#17A589"   # teal    (Hessian-LLC)
-C_FREQ     = "#D35400"   # orange  (active frequency count)
-C_RATIO    = "#5D6D7E"   # slate
+C_TRAIN = "#2471A3"   # blue
+C_TEST  = "#C0392B"   # red
+C_LLC   = "#7D3C98"   # purple  (SGLD-LLC)
+C_HLLC  = "#17A589"   # teal    (Hessian-LLC)
+C_FREQ  = "#D35400"   # orange  (active frequency count)
+C_TRACE = "#1A6A9A"   # deep blue — tr(H)
 
-# Phase background shading — saturated enough to be visible in print
+# Phase background shading
 PH_MEM  = "#85C1E9"   # medium blue   — memorisation
 PH_PLAT = "#F9E79F"   # medium yellow — plateau
 PH_GROK = "#82E0AA"   # medium green  — grokking
@@ -63,30 +62,12 @@ def load_runs(results_dir: Path) -> list[dict]:
 
 
 def align(runs: list[dict], key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Stack values for `key` across runs, return (steps, mean, std).
-    All runs must share the same checkpoint steps.
-    """
-    steps = np.array(runs[0]["steps"])
+    steps  = np.array(runs[0]["steps"])
     matrix = np.array([r[key] for r in runs])   # (n_seeds, n_steps)
     return steps, matrix.mean(axis=0), matrix.std(axis=0)
 
 
-def fourier_matrix(runs: list[dict]) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Return (steps, mean_amp_matrix) where mean_amp_matrix has shape
-    (n_steps, p//2) — the mean Fourier amplitude spectrum across seeds.
-    """
-    steps = np.array(runs[0]["steps"])
-    matrices = np.array([r["fourier_amps"] for r in runs])  # (n_seeds, n_steps, p//2)
-    return steps, matrices.mean(axis=0)                     # (n_steps, p//2)
-
-
 def detect_transition(runs: list[dict], threshold: float = 0.5) -> tuple[float, float]:
-    """
-    Per-run: first step where test_acc exceeds threshold.
-    Returns (mean_step, std_step) across seeds.
-    """
     transition_steps = []
     for r in runs:
         steps = np.array(r["steps"])
@@ -102,20 +83,10 @@ def detect_transition(runs: list[dict], threshold: float = 0.5) -> tuple[float, 
 # Shared phase-shading helper
 # ---------------------------------------------------------------------------
 
-def add_phase_shading(ax, mem_end: float, grok_start: float, grok_end: float,
-                      xmax: float):
-    """Add colour-coded background bands for the three training phases."""
+def add_phase_shading(ax, mem_end, grok_start, grok_end):
     ax.axvspan(0,          mem_end,    alpha=0.30, color=PH_MEM,  zorder=0)
     ax.axvspan(mem_end,    grok_start, alpha=0.30, color=PH_PLAT, zorder=0)
     ax.axvspan(grok_start, grok_end,   alpha=0.42, color=PH_GROK, zorder=0)
-
-
-def phase_legend_handles():
-    return [
-        mpatches.Patch(color=PH_MEM,  alpha=0.85, label="Memorisation"),
-        mpatches.Patch(color=PH_PLAT, alpha=0.85, label="Plateau"),
-        mpatches.Patch(color=PH_GROK, alpha=0.85, label="Grokking"),
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -132,70 +103,68 @@ def fig_training(runs, figures_dir, phase_steps):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.5))
     xmax = steps[-1]
 
-    # — Loss panel ——————————————————————————————————————————————————————
-    add_phase_shading(ax1, mem_end, grok_start, grok_end, xmax)
+    # — Loss panel (log scale) ————————————————————————————————————————————
+    add_phase_shading(ax1, mem_end, grok_start, grok_end)
 
     ax1.semilogy(steps, mean_tr_loss, color=C_TRAIN, label="Train loss")
     ax1.fill_between(steps,
-                     np.maximum(mean_tr_loss - std_tr_loss, 1e-6),
+                     np.maximum(mean_tr_loss - std_tr_loss, 1e-4),
                      mean_tr_loss + std_tr_loss,
                      color=C_TRAIN, alpha=0.18)
 
     ax1.semilogy(steps, mean_te_loss, color=C_TEST, linestyle="--", label="Test loss")
     ax1.fill_between(steps,
-                     np.maximum(mean_te_loss - std_te_loss, 1e-6),
+                     np.maximum(mean_te_loss - std_te_loss, 1e-4),
                      mean_te_loss + std_te_loss,
                      color=C_TEST, alpha=0.18)
 
-    # Random-chance baseline
-    n_classes = runs[0]["fourier_amps"][0].__len__() * 2 + 1  # ≈ p
+    # Random-chance baseline: CE loss for uniform over p=97 classes = log(97)
     ax1.axhline(np.log(97), color="gray", linestyle=":", linewidth=1.5,
-                label=f"Random chance (log 97)")
+                label=r"Random chance ($\ln 97 \approx 4.6$)")
 
     ax1.set_ylim(bottom=1e-3)
     ax1.set_xlabel("Training step")
-    ax1.set_ylabel("Cross-entropy loss")
+    ax1.set_ylabel("Cross-entropy loss (nats)")
     ax1.set_title("Loss")
-    ax1.legend(loc="upper right")
+    ax1.legend(loc="lower left", fontsize=11)
 
-    # Phase labels — placed near y-axis top after ylim is set
+    # Phase labels
     ylo, yhi = ax1.get_ylim()
-    label_y = 10 ** (0.82 * (np.log10(yhi) - np.log10(ylo)) + np.log10(ylo))
-    ax1.text(mem_end / 2, label_y,
-             "Memorisation", ha="center", fontsize=11, color="#1A5276", alpha=0.9)
-    ax1.text((mem_end + grok_start) / 2, label_y,
-             "Plateau", ha="center", fontsize=11, color="#7D6608", alpha=0.9)
-    ax1.text((grok_start + min(grok_end + 200, xmax)) / 2, label_y,
-             "Grokking", ha="center", fontsize=11, color="#145A32", alpha=0.9)
+    label_y = 10 ** (0.88 * (np.log10(yhi) - np.log10(ylo)) + np.log10(ylo))
+    ax1.text(mem_end / 2,                        label_y*2.2, "Memorization",
+             ha="center", fontsize=11, color="#1A5276")
+    ax1.text((mem_end + grok_start) / 2,         label_y*2.2, "Plateau",
+             ha="center", fontsize=11, color="#7D6608")
+    ax1.text((grok_start + min(grok_end+200, xmax)) / 2, label_y*2.2, "Grokking",
+             ha="center", fontsize=11, color="#145A32")
 
     # — Accuracy panel ———————————————————————————————————————————————————
-    add_phase_shading(ax2, mem_end, grok_start, grok_end, xmax)
+    add_phase_shading(ax2, mem_end, grok_start, grok_end)
 
     ax2.plot(steps, 100 * mean_tr_acc, color=C_TRAIN, label="Train accuracy")
     ax2.fill_between(steps,
-                     100 * (mean_tr_acc - std_tr_acc),
-                     100 * (mean_tr_acc + std_tr_acc),
+                     np.clip(100 * (mean_tr_acc - std_tr_acc), 0, 100),
+                     np.clip(100 * (mean_tr_acc + std_tr_acc), 0, 100),
                      color=C_TRAIN, alpha=0.18)
 
     ax2.plot(steps, 100 * mean_te_acc, color=C_TEST, linestyle="--",
              label="Test accuracy")
     ax2.fill_between(steps,
-                     100 * (mean_te_acc - std_te_acc),
-                     100 * (mean_te_acc + std_te_acc),
+                     np.clip(100 * (mean_te_acc - std_te_acc), 0, 100),
+                     np.clip(100 * (mean_te_acc + std_te_acc), 0, 100),
                      color=C_TEST, alpha=0.18)
 
     ax2.set_xlabel("Training step")
     ax2.set_ylabel("Accuracy (%)")
     ax2.set_title("Accuracy")
-    ax2.set_ylim(-5, 105)
-    ax2.axhline(100, color=C_TRAIN, linestyle=":", linewidth=1, alpha=0.5)
+    ax2.set_ylim(-3, 105)
+    ax2.axhline(100, color=C_TRAIN, linestyle=":", linewidth=1, alpha=0.4)
     ax2.legend(loc="center right")
 
     n = len(runs)
     fig.suptitle(
-        f"Grokking arc: memorisation  →  plateau  →  generalisation "
-        f"(mean ± std, n={n} seeds)",
-        fontsize=14, y=1.01,
+        f"Grokking arc: memorization → plateau → generalization  (mean ± std, n={n} seeds)",
+        fontsize=13, y=1.01,
     )
     fig.tight_layout()
     out = figures_dir / "fig1_training.png"
@@ -205,95 +174,74 @@ def fig_training(runs, figures_dir, phase_steps):
 
 
 # ---------------------------------------------------------------------------
-# Figure 2 — Local vs. global geometry diverge
+# Figure 2 — tr(H) collapses; SGLD-LLC does not
 # ---------------------------------------------------------------------------
 
 def fig_dissociation(runs, figures_dir, phase_steps):
     mem_end, grok_start, grok_end = phase_steps
-    steps, mean_llc,  std_llc  = align(runs, "llc")
-    _,     mean_hllc, std_hllc = align(runs, "hessian_llc")
-    _,     mean_te_acc, _      = align(runs, "test_acc")
+    steps = np.array(runs[0]["steps"])
+    xmax  = steps[-1]
 
-    ratio_all = np.array([np.array(r["llc"]) / np.array(r["hessian_llc"])
-                          for r in runs])
-    mean_ratio = ratio_all.mean(axis=0)
-    std_ratio  = ratio_all.std(axis=0)
+    _, mean_ht,  std_ht  = align(runs, "htrace")
+    _, mean_llc, std_llc = align(runs, "llc")
+    _, mean_te_acc, _    = align(runs, "test_acc")
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.5))
-    xmax = steps[-1]
+    plat_mask = (mean_te_acc > 0.05) & (mean_te_acc < 0.50)
+    post_mask = mean_te_acc > 0.95
+    ht_ratio  = mean_ht[plat_mask].mean() / (mean_ht[post_mask].mean() + 1e-9)
 
-    # — Left: both LLCs on log scale ─────────────────────────────────────
-    add_phase_shading(ax1, mem_end, grok_start, grok_end, xmax)
+    fig, ax = plt.subplots(figsize=(9, 4.8))
+    add_phase_shading(ax, mem_end, grok_start, grok_end)
 
-    ax1.semilogy(steps, mean_llc, color=C_LLC, label="SGLD-LLC  (global multiplicity)")
-    ax1.fill_between(steps,
-                     np.maximum(mean_llc - std_llc, 1),
-                     mean_llc + std_llc,
-                     color=C_LLC, alpha=0.18)
+    # tr(H) on left log-axis
+    ax.semilogy(steps, mean_ht, color=C_TRACE, linewidth=2.5,
+                label=r"$\mathrm{tr}(H)$  (total curvature)")
+    ax.fill_between(steps,
+                    np.maximum(mean_ht - std_ht, 1.0),
+                    mean_ht + std_ht,
+                    color=C_TRACE, alpha=0.18)
+    ax.set_ylabel(r"Hessian trace  $\mathrm{tr}(H)$", color=C_TRACE, fontsize=13)
+    ax.tick_params(axis="y", labelcolor=C_TRACE)
 
-    ax1.semilogy(steps, mean_hllc, color=C_HLLC,
-                 label=r"Hessian-LLC $\hat\lambda_H$  (local flatness)")
-    ax1.fill_between(steps,
-                     np.maximum(mean_hllc - std_hllc, 0.1),
-                     mean_hllc + std_hllc,
-                     color=C_HLLC, alpha=0.18)
-
-    # Reference line: circuit prediction (~12 freq × 2 params = 24, λ_H ≈ 19)
-    ax1.axhline(19, color=C_HLLC, linestyle=":", linewidth=1.8, alpha=0.7)
-    ax1.text(xmax * 0.97, 19 * 1.35,
-             r"$\hat\lambda_H \approx 19$" + "\n(~12 freq × 2 params)",
-             ha="right", fontsize=10.5, color=C_HLLC)
-
-    # Test accuracy on secondary axis
-    ax1b = ax1.twinx()
-    ax1b.plot(steps, 100 * mean_te_acc, color=C_TEST,
-              linestyle="--", linewidth=1.5, alpha=0.7, label="Test acc (%)")
-    ax1b.set_ylabel("Test accuracy (%)", fontsize=13, color=C_TEST)
-    ax1b.tick_params(axis="y", labelcolor=C_TEST)
-    ax1b.set_ylim(-5, 115)
-    ax1b.spines["right"].set_visible(True)
-
-    ax1.set_xlabel("Training step")
-    ax1.set_ylabel("LLC  (log scale)")
-    ax1.set_title("Two orders of magnitude diverge at grokking")
-    handles1, labels1 = ax1.get_legend_handles_labels()
-    handles2, labels2 = ax1b.get_legend_handles_labels()
-    ax1.legend(handles1 + handles2, labels1 + labels2,
-               loc="lower right", fontsize=11)
-
-    # — Right: ratio on log scale ─────────────────────────────────────────
-    add_phase_shading(ax2, mem_end, grok_start, grok_end, xmax)
-
-    ax2.semilogy(steps, mean_ratio, color=C_RATIO,
-                 label="SGLD-LLC / Hessian-LLC")
-    ax2.fill_between(steps,
-                     np.maximum(mean_ratio - std_ratio, 0.1),
-                     mean_ratio + std_ratio,
-                     color=C_RATIO, alpha=0.22)
-
-    # Annotate the post-grokking plateau
-    post_idx = np.where(steps >= grok_end)[0]
-    if len(post_idx):
-        post_ratio = mean_ratio[post_idx[0]]
-        ax2.annotate(
-            "~100× gap\n(geometry-based\ntransition detector)",
-            xy=(steps[post_idx[0]], post_ratio),
-            xytext=(steps[post_idx[0]] - (xmax * 0.3), post_ratio * 3),
-            fontsize=11, color=C_RATIO,
-            arrowprops=dict(arrowstyle="->", color=C_RATIO, lw=1.5),
+    # Annotate the collapse: plateau mean → post-grokking mean
+    post_i = np.where(steps >= grok_end)[0]
+    if len(post_i):
+        pi = post_i[0]
+        ax.annotate(
+            f"÷{ht_ratio:.1f}×",
+            xy=(steps[pi], mean_ht[pi]),
+            xytext=(steps[pi] + xmax * 0.06, mean_ht[pi] * 4.5),
+            fontsize=12, color=C_TRACE, fontweight="bold",
+            arrowprops=dict(arrowstyle="->", color=C_TRACE, lw=1.5),
         )
 
-    ax2.set_xlabel("Training step")
-    ax2.set_ylabel("SGLD-LLC / Hessian-LLC  (log scale)")
-    ax2.set_title("Ratio jumps at the grokking transition")
-    ax2.legend(loc="upper left")
+    # SGLD-LLC on right log-axis
+    axb = ax.twinx()
+    axb.semilogy(steps, mean_llc, color=C_LLC, linewidth=2.5,
+                 label="SGLD-LLC  (global multiplicity)")
+    axb.fill_between(steps,
+                     np.maximum(mean_llc - std_llc, 1.0),
+                     mean_llc + std_llc,
+                     color=C_LLC, alpha=0.18)
+    axb.set_ylabel("SGLD-LLC", color=C_LLC, fontsize=13)
+    axb.tick_params(axis="y", labelcolor=C_LLC)
+    axb.spines["right"].set_visible(True)
 
-    n = len(runs)
-    fig.suptitle(
-        "Local flatness (Hessian) collapses at grokking; "
-        f"global multiplicity (SGLD) does not  (n={n} seeds)",
-        fontsize=13, y=1.01,
+    ax.set_xlabel("Training step")
+    ax.set_title(
+        r"$\mathrm{tr}(H)$ collapses $\sim\!4\times$ at grokking; SGLD-LLC unchanged"
+        f"  (n={len(runs)} seeds)"
     )
+
+    handles1, labels1 = ax.get_legend_handles_labels()
+    handleb, labelb   = axb.get_legend_handles_labels()
+    ax.legend(handles1 + handleb, labels1 + labels1 + labelb,
+              loc="lower left", fontsize=10.5)
+
+    # Fix: merge both legend sets properly
+    ax.get_legend().remove()
+    ax.legend(handles1 + handleb, labels1 + labelb, loc="lower right", fontsize=10.5)
+
     fig.tight_layout()
     out = figures_dir / "fig2_dissociation.png"
     fig.savefig(out, dpi=180, bbox_inches="tight")
@@ -307,42 +255,49 @@ def fig_dissociation(runs, figures_dir, phase_steps):
 
 def fig_circuit_imprint(runs, figures_dir, phase_steps):
     mem_end, grok_start, grok_end = phase_steps
-    # Use a single representative seed for the heatmap — crisper than the mean
-    # (averaging across seeds blurs individual frequency activations).
-    # Mean across seeds is used for all line plots on the right panel.
-    ref_run = runs[0]
-    amp_matrix = np.array(ref_run["fourier_amps"])    # (n_steps, p//2)
+    # Heatmap uses a single seed (averaged amplitudes blur individual freq activations).
+    # All line plots use mean ± std across seeds.
+    ref_run    = runs[0]
+    amp_matrix = np.array(ref_run["fourier_amps"])   # (n_steps, p//2)
     steps      = np.array(ref_run["steps"])
-    _,  mean_hllc, std_hllc = align(runs, "hessian_llc")
-    _,  mean_te_acc, _      = align(runs, "test_acc")
-
-    threshold_mult = 2.0
-    active_all = []
-    for r in runs:
-        amps = np.array(r["fourier_amps"])             # (n_steps, p//2)
-        mean_amp = amps.mean(axis=1, keepdims=True)
-        active_all.append((amps > threshold_mult * mean_amp).sum(axis=1))
-    active_all   = np.array(active_all)               # (n_seeds, n_steps)
-    mean_active  = active_all.mean(axis=0)
-    std_active   = active_all.std(axis=0)
+    # Number of final checkpoints used as the settled reference for both panels.
+    n_ref = 5
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 4.8))
     xmax = steps[-1]
 
-    # — Left: Fourier spectrum heatmap (mean across seeds) ────────────────
-    # amp_matrix: (n_steps, p//2) → transpose to (p//2, n_steps) for imshow
+    # — Left: Fourier spectrum heatmap ————————————————————————————————————
     n_freq = amp_matrix.shape[1]
     im = ax1.imshow(
-        amp_matrix.T,                                  # (p//2, n_steps)
+        amp_matrix.T,                               # (p//2, n_steps)
         aspect="auto",
         origin="lower",
         extent=[steps[0], steps[-1], 0.5, n_freq + 0.5],
-        cmap="hot",
+        cmap="inferno",
         interpolation="nearest",
     )
     plt.colorbar(im, ax=ax1, label="Amplitude", fraction=0.04, pad=0.02)
 
-    # Phase lines
+    # Mark active frequencies using the last 5 checkpoints of the reference seed
+    # — same window used for the right-panel reference lines — so both panels
+    # show a consistent count.
+    if len(amp_matrix) >= n_ref:
+        mean_post = amp_matrix[-n_ref:].mean(axis=0)    # (p//2,)
+        active_k  = np.where(mean_post > 2.0 * mean_post.mean())[0]
+        for k in active_k:
+            line = ax1.axhline(k + 1, color="white", linewidth=1.2,
+                               linestyle="--", alpha=0.9)
+            line.set_path_effects([
+                pe.withStroke(linewidth=3.0, foreground="black", alpha=0.55)
+            ])
+        #if len(active_k):
+        #    txt = ax1.text(steps[-1] * 0.97, active_k.max() + 2,
+        #                   f"{len(active_k)} active\nfreq.", color="white",
+        #                   fontsize=9, ha="right", va="bottom")
+        #    txt.set_path_effects([
+        #        pe.withStroke(linewidth=2.5, foreground="black", alpha=0.6)
+        #    ])
+
     ax1.axvline(mem_end,    color="dodgerblue", linewidth=1.5,
                 linestyle="--", alpha=0.8)
     ax1.axvline(grok_start, color="limegreen",  linewidth=2.0,
@@ -354,66 +309,86 @@ def fig_circuit_imprint(runs, figures_dir, phase_steps):
                   "(bright = high amplitude; single seed)")
     ax1.legend(loc="upper left", fontsize=11)
 
-    # — Right: active freq count + Hessian-LLC ───────────────────────────
-    add_phase_shading(ax2, mem_end, grok_start, grok_end, xmax)
+    # — Right: active freq count (left axis) and hLLC (right axis) ————————
+    # Per-step active-frequency count: frequencies above 2× the step-mean amplitude.
+    active_all = []
+    for r in runs:
+        amps     = np.array(r["fourier_amps"])
+        mean_amp = amps.mean(axis=1, keepdims=True)
+        active_all.append((amps > 2.0 * mean_amp).sum(axis=1).astype(float))
+    active_arr  = np.array(active_all)
+    mean_active = active_arr.mean(axis=0)
+    std_active  = active_arr.std(axis=0)
 
-    # Active frequency count (left y-axis)
+    _, mean_hllc, std_hllc = align(runs, "hessian_llc")
+
+    # Use the last 5 checkpoints as the settled reference — the count is still
+    # rising in early post-grokking steps (transient), so averaging over all
+    # post-grokking steps underestimates the settled value.
+    n_ref = 5
+    settled_active = mean_active[-n_ref:].mean()
+    settled_hllc   = mean_hllc[-n_ref:].mean()
+
+    add_phase_shading(ax2, mem_end, grok_start, grok_end)
+
+    # Active frequency count — left axis
     ax2.plot(steps, mean_active, color=C_FREQ, linewidth=2.5,
-             label="Active Fourier frequencies")
+             label="Active Fourier freq.")
     ax2.fill_between(steps,
                      np.maximum(mean_active - std_active, 0),
                      mean_active + std_active,
                      color=C_FREQ, alpha=0.22)
+    ax2.axhline(settled_active, color=C_FREQ, linestyle=":", linewidth=1.5, alpha=0.7)
+    ax2.text(xmax * 0.97, settled_active + 1.6,
+             f"~{settled_active:.0f} active freq.", ha="right",
+             fontsize=10, color=C_FREQ)
     ax2.set_xlabel("Training step")
-    ax2.set_ylabel("Active frequency count", color=C_FREQ, fontsize=14)
+    ax2.set_ylabel("Active Fourier frequencies", color=C_FREQ, fontsize=13)
     ax2.tick_params(axis="y", labelcolor=C_FREQ)
-    ax2.set_ylim(-1, max(mean_active.max() * 1.5, 20))
+    ax2.set_ylim(0, max(mean_active.max(), 15) * 1.3)
 
-    # Hessian-LLC (right y-axis)
+    # hLLC — right axis (linear scale; represents effective constrained dimensions)
     ax2b = ax2.twinx()
-    ax2b.semilogy(steps, mean_hllc, color=C_HLLC, linewidth=2.5,
-                  linestyle="-", label=r"Hessian-LLC $\hat\lambda_H$")
+    ax2b.plot(steps, mean_hllc, color=C_HLLC, linewidth=2.5, linestyle="--",
+              label=r"$\hat\lambda_H = \mathrm{tr}(H)/2\lambda_{\max}$")
     ax2b.fill_between(steps,
-                      np.maximum(mean_hllc - std_hllc, 0.1),
+                      np.maximum(mean_hllc - std_hllc, 0),
                       mean_hllc + std_hllc,
                       color=C_HLLC, alpha=0.18)
-    ax2b.axhline(19, color=C_HLLC, linestyle=":", linewidth=1.8, alpha=0.7)
-    ax2b.set_ylabel(r"Hessian-LLC $\hat\lambda_H$  (log scale)",
-                    color=C_HLLC, fontsize=14)
+    ax2b.axhline(settled_hllc, color=C_HLLC, linestyle=":", linewidth=1.5, alpha=0.7)
+    ax2b.text(xmax * 0.97, settled_hllc - 6.,
+              rf"$\hat\lambda_H \approx {settled_hllc:.0f}$"
+              rf"$\,\approx\,{settled_active:.0f}\times 2$",
+              ha="right", fontsize=10, color=C_HLLC)
+    ax2b.set_ylabel(r"Hessian-LLC  $\hat\lambda_H$", color=C_HLLC, fontsize=13)
     ax2b.tick_params(axis="y", labelcolor=C_HLLC)
+    ax2b.set_ylim(0, max(mean_hllc.max(), 30) * 1.3)
     ax2b.spines["right"].set_visible(True)
 
-    # Test accuracy for reference
-    ax2c_line, = ax2b.plot(steps, mean_te_acc * max(mean_hllc) * 1.1,
-                           color=C_TEST, linestyle="--",
-                           linewidth=1.5, alpha=0.6)
-
-    # Convergence annotation
+    # Annotate the grokking-onset step where both signals transition
+    grok_i = np.where(steps >= grok_start)[0][0]
     ax2.annotate(
-        "Both signals\ntransition here",
-        xy=(grok_start, mean_active[np.where(steps >= grok_start)[0][0]]),
-        xytext=(grok_start + (xmax - grok_start) * 0.25,
-                mean_active.max() * 0.55),
-        fontsize=11,
+        "Both transition\nhere",
+        xy=(grok_start, mean_active[grok_i]),
+        xytext=(grok_start - xmax * 0.30, mean_active[grok_i] + 3),
+        fontsize=10.5,
         arrowprops=dict(arrowstyle="->", color="black", lw=1.5),
     )
 
-    # Legend
-    lines  = [Line2D([0], [0], color=C_FREQ, lw=2.5),
-              Line2D([0], [0], color=C_HLLC, lw=2.5),
-              Line2D([0], [0], color=C_TEST, lw=1.5, linestyle="--", alpha=0.7)]
-    labels = ["Active Fourier freq.",
-              r"Hessian-LLC $\hat\lambda_H$",
-              "Test accuracy (scaled)"]
-    ax2.legend(lines, labels, loc="lower right", fontsize=11)
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    handleb, labelb   = ax2b.get_legend_handles_labels()
+    ax2.legend(handles2 + handleb, labels2 + labelb, loc="lower right", fontsize=11)
 
-    ax2.set_title("Circuit Imprint: independent signals converge\n"
-                  r"at grokking onset  ($\sim\!12$ freq $\times\,2 \approx 24$; $\hat\lambda_H \approx 19$)")
+    ax2.set_title(
+        "Circuit Imprint: Hessian geometry recovers circuit dimensionality\n"
+        rf"($\hat\lambda_H \approx {settled_hllc:.0f} \approx {settled_active:.0f}"
+        r"\,\mathrm{freq} \times 2\,\mathrm{params}$)"
+    )
 
     n = len(runs)
     fig.suptitle(
-        "Fourier amplitude analysis and Hessian curvature agree "
-        f"with no shared information  (n={n} seeds)",
+        "Fourier amplitude and Hessian curvature agree with no shared information"
+        f"  (n={n} seeds)",
         fontsize=13, y=1.02,
     )
     fig.tight_layout()
@@ -434,14 +409,9 @@ def main():
     )
     parser.add_argument("--results_dir", default="results")
     parser.add_argument("--figures_dir", default="figures")
-    # Phase boundary steps (used for background shading)
-    # These are approximate; the actual transition is visible in the curves.
-    parser.add_argument("--mem_end",    type=int, default=500,
-                        help="end of memorisation phase (step)")
-    parser.add_argument("--grok_start", type=int, default=1900,
-                        help="start of grokking transition (step)")
-    parser.add_argument("--grok_end",   type=int, default=2600,
-                        help="end of grokking transition (step)")
+    parser.add_argument("--mem_end",    type=int, default=500)
+    parser.add_argument("--grok_start", type=int, default=1900)
+    parser.add_argument("--grok_end",   type=int, default=2600)
     cfg = parser.parse_args()
 
     results_dir = Path(cfg.results_dir)
@@ -451,7 +421,6 @@ def main():
     runs = load_runs(results_dir)
     phase_steps = (cfg.mem_end, cfg.grok_start, cfg.grok_end)
 
-    # Override phase boundaries from the data if only one seed loaded
     if len(runs) == 1:
         t_mean, _ = detect_transition(runs, threshold=0.50)
         phase_steps = (500, int(t_mean) - 100, int(t_mean) + 300)
@@ -460,9 +429,9 @@ def main():
           f"grok_start={phase_steps[1]}, grok_end={phase_steps[2]}")
     print(f"Generating figures → {figures_dir}/\n")
 
-    fig_training(runs,         figures_dir, phase_steps)
-    fig_dissociation(runs,     figures_dir, phase_steps)
-    fig_circuit_imprint(runs,  figures_dir, phase_steps)
+    fig_training(runs,        figures_dir, phase_steps)
+    fig_dissociation(runs,    figures_dir, phase_steps)
+    fig_circuit_imprint(runs, figures_dir, phase_steps)
 
     print("\nDone!  Three figures saved:")
     print("  figures/fig1_training.png")

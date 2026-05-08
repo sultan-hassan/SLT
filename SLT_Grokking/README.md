@@ -1,7 +1,7 @@
 # SLT × Grokking — Reproducibility Code
 
 Code to reproduce the three figures in  
-**"Geometric Signatures of Emergent Algorithms"** (ICML 2026 MechInterp Workshop)
+**"Circuit Imprint** paper submitted for review. 
 
 ---
 

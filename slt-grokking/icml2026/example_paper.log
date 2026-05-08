@@ -1,9 +1,8 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.3.8)  8 MAY 2026 13:47
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025) (preloaded format=pdflatex 2025.3.8)  8 MAY 2026 14:18
 entering extended mode
  restricted \write18 enabled.
- file:line:error style messages enabled.
  %&-line parsing enabled.
-**example_paper.tex
+**example_paper
 (./example_paper.tex
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
@@ -613,20 +612,12 @@ File: omlptm.fd
 LaTeX Font Info:    Font shape `OML/ptm/m/n' in size <9> not available
 (Font)              Font shape `OML/cmm/m/it' tried instead on input line 44.
 
-Underfull \vbox (badness 10000) has occurred while \output is active []
 
-
-
-
-Underfull \hbox (badness 3058) in paragraph at lines 100--113
- \OT1/ptm/b/n/10 (+20) Three ge-o-met-ric faces of grokking. \OT1/ptm/m/n/10 (+
-20) What makes
- []
-
-
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
-
+LaTeX Font Info:    Trying to load font information for TS1+ptm on input line 9
+6.
+(/usr/local/texlive/2025/texmf-dist/tex/latex/psnfss/ts1ptm.fd
+File: ts1ptm.fd 2001/06/04 font definitions for TS1/ptm.
+)
 
 [1{/usr/local/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{/usr/l
 ocal/texlive/2025/texmf-dist/fonts/enc/dvips/base/8r.enc}
@@ -634,69 +625,41 @@ ocal/texlive/2025/texmf-dist/fonts/enc/dvips/base/8r.enc}
 
 
 ]
-LaTeX Font Info:    Trying to load font information for TS1+ptm on input line 1
-24.
-
-(/usr/local/texlive/2025/texmf-dist/tex/latex/psnfss/ts1ptm.fd
-File: ts1ptm.fd 2001/06/04 font definitions for TS1/ptm.
-)
-
-<../figures/fig1_training.png, id=52, 923.45pt x 328.8285pt>
+<../figures/fig1_training.png, id=63, 923.45pt x 328.8285pt>
 File: ../figures/fig1_training.png Graphic file (type png)
 <use ../figures/fig1_training.png>
-Package pdftex.def Info: ../figures/fig1_training.png  used on input line 225.
+Package pdftex.def Info: ../figures/fig1_training.png  used on input line 180.
 (pdftex.def)             Requested size: 487.8225pt x 173.70627pt.
-
-
-[2]
-<../figures/fig2_dissociation.png, id=80, 638.385pt x 332.442pt>
+<../figures/fig2_dissociation.png, id=67, 638.385pt x 332.442pt>
 File: ../figures/fig2_dissociation.png Graphic file (type png)
 <use ../figures/fig2_dissociation.png>
 Package pdftex.def Info: ../figures/fig2_dissociation.png  used on input line 2
-79.
-(pdftex.def)             Requested size: 258.36668pt x 134.54695pt.
+07.
+(pdftex.def)             Requested size: 234.8775pt x 122.31172pt.
 
-Overfull \hbox (23.48918pt too wide) in paragraph at lines 279--292
- [][] 
- []
 
-<../figures/fig3_circuit_imprint.png, id=81, 1004.9545pt x 354.123pt>
+<../figures/fig3_circuit_imprint.png, id=71, 1004.9545pt x 354.123pt>
 File: ../figures/fig3_circuit_imprint.png Graphic file (type png)
 <use ../figures/fig3_circuit_imprint.png>
 Package pdftex.def Info: ../figures/fig3_circuit_imprint.png  used on input lin
-e 297.
+e 252.
 (pdftex.def)             Requested size: 487.8225pt x 171.89532pt.
 
 
-
-
-[3 <../figures/fig1_training.png> <../figures/fig2_dissociation.png>]
-Underfull \vbox (badness 2837) has occurred while \output is active []
-
+[2]
+Underfull \vbox (badness 10000) has occurred while \output is active []
 
 
 
-Underfull \hbox (badness 2762) in paragraph at lines 384--396
- \OT1/ptm/b/n/10 (+20) Re-la-tion to the competing-basins pic-ture. \OT1/ptm/m/
-n/10 (+20) Re-cent
- []
+(./example_paper.bbl
 
-
-Underfull \hbox (badness 2503) in paragraph at lines 384--396
-\OT1/ptm/m/n/10 (+20) work ([][]Au-thor(s) of arXiv:2603.01192[][], [][]2026[][
-]) frames
- []
+[3 <../figures/fig1_training.png> <../figures/fig2_dissociation.png>])
 
 
 
-[4 <../figures/fig3_circuit_imprint.png>] (./example_paper.bbl
-Underfull \vbox (badness 1297) has occurred while \output is active []
+[4
 
-
-
-)
-
-[5] (./example_paper.aux)
+ <../figures/fig3_circuit_imprint.png>] (./example_paper.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2025-01-18>
@@ -705,13 +668,13 @@ Package rerunfilecheck Info: File `example_paper.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 17527 strings out of 473190
- 291156 string characters out of 5715801
- 767274 words of memory out of 5000000
+ 17497 strings out of 473190
+ 290868 string characters out of 5715801
+ 770274 words of memory out of 5000000
  40230 multiletter control sequences out of 15000+600000
- 594236 words of font info for 267 fonts, out of 8000000 for 9000
+ 592693 words of font info for 248 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,11n,79p,1010b,629s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,11n,79p,1006b,629s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb
 ></usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb>
 </usr/local/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></
@@ -728,10 +691,10 @@ e/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/local/texlive/
 e/2025/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></usr/local/texlive/2025/tex
 mf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/local/texlive/2025/texmf-dist/fo
 nts/type1/urw/times/utmri8a.pfb>
-Output written on example_paper.pdf (5 pages, 785544 bytes).
+Output written on example_paper.pdf (4 pages, 776769 bytes).
 PDF statistics:
- 188 PDF objects out of 1000 (max. 8388607)
- 141 compressed objects within 2 object streams
- 33 named destinations out of 1000 (max. 500000)
+ 185 PDF objects out of 1000 (max. 8388607)
+ 139 compressed objects within 2 object streams
+ 32 named destinations out of 1000 (max. 500000)
  51728 words of extra memory for PDF output out of 61914 (max. 10000000)
 

@@ -6,39 +6,39 @@
 \citation{nanda2023progress}
 \citation{watanabe2009algebraic}
 \citation{varma2023explaining,hoogland2024developmental}
+\citation{watanabe2013widely}
 \newlabel{sec:intro}{{1}{1}{}{section.1}{}}
 \newlabel{sec:intro@cref}{{[section][1][]1}{[1][1][]1}{}{}{}}
-\citation{watanabe2013widely}
+\newlabel{sec:background}{{2}{1}{}{section.2}{}}
+\newlabel{sec:background@cref}{{[section][2][]2}{[1][1][]1}{}{}{}}
+\newlabel{eq:llc}{{1}{1}{}{equation.1}{}}
+\newlabel{eq:llc@cref}{{[equation][1][]1}{[1][1][]1}{}{}{}}
 \citation{hutchinson1990stochastic}
 \citation{power2022grokking}
 \citation{kingma2015adam,loshchilov2019decoupled}
 \citation{varma2023explaining}
-\newlabel{sec:background}{{2}{2}{}{section.2}{}}
-\newlabel{sec:background@cref}{{[section][2][]2}{[1][2][]2}{}{}{}}
-\newlabel{eq:llc}{{1}{2}{}{equation.1}{}}
-\newlabel{eq:llc@cref}{{[equation][1][]1}{[1][2][]2}{}{}{}}
+\citation{nanda2023progress}
+\citation{competing_basins2026}
 \newlabel{eq:h-llc}{{2}{2}{}{equation.2}{}}
-\newlabel{eq:h-llc@cref}{{[equation][2][]2}{[1][2][]2}{}{}{}}
+\newlabel{eq:h-llc@cref}{{[equation][2][]2}{[1][1][]2}{}{}{}}
 \newlabel{sec:setup}{{3}{2}{}{section.3}{}}
 \newlabel{sec:setup@cref}{{[section][3][]3}{[1][2][]2}{}{}{}}
 \newlabel{sec:results}{{4}{2}{}{section.4}{}}
 \newlabel{sec:results@cref}{{[section][4][]4}{[1][2][]2}{}{}{}}
-\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{fig:training}{{1}{3}{\textbf {Three-phase grokking arc} (mean~$\pm $~std, 5 seeds). The three phases—memorisation (blue), plateau (orange), and grokking transition (green)—are annotated consistently across all figures. Training accuracy reaches 100\% early while test accuracy stays near random chance until the abrupt transition (mean step~$\approx $2\,700). Loss is in nats; the random-chance baseline is $\ln 97 \approx 4.6$. Test loss peaks above this baseline during the plateau, confirming the lookup-table solution actively suppresses generalisation before the algorithmic switch occurs. The shaded bands confirm the three-phase structure is robust across random seeds}{figure.caption.1}{}}
-\newlabel{fig:training@cref}{{[figure][1][]1}{[1][2][]3}{}{}{}}
-\newlabel{fig:dissociation}{{2}{3}{\textbf {Total curvature collapses at grokking; global multiplicity does not} (mean~$\pm $~std, 5 seeds; both axes log scale). \emph {Left axis (blue):} Hessian trace $\operatorname {tr}(H)$ rises during memorisation, then collapses $\sim \!4.1\times $ at grokking—from $\sim \!52{,}000$ (plateau) to $\sim \!12{,}500$ (post-grokking). \emph {Right axis (purple):} SGLD-LLC rises to $\sim \!1{,}900$ during the memorisation phase, then remains flat from the plateau through and beyond the grokking transition. The two probes diverge sharply at grokking because they measure different properties: $\operatorname {tr}(H)$ captures local basin curvature, which changes dramatically; SGLD-LLC captures global multiplicity, which does not}{figure.caption.2}{}}
-\newlabel{fig:dissociation@cref}{{[figure][2][]2}{[1][3][]3}{}{}{}}
-\citation{nanda2023progress}
-\citation{competing_basins2026}
-\newlabel{fig:fourier}{{3}{4}{\textbf {Circuit Imprint: loss-geometry independently recovers the circuit's dimensionality.} \emph {Left:} Token-embedding Fourier spectrum (single representative seed; bright = high amplitude). Through the memorisation phase all frequencies are dim and equal; at the grokking transition a small set abruptly activates (vertical green dashed line) while others remain near zero. \emph {Right:} Active frequency count (orange, $\sim \!11$ post-grokking) and $\hat \lambda _H$ (teal, $20\!\pm \!2$ post-grokking) both transition at the same training step and reach consistent values post-grokking. The two signals are derived from entirely different objects (embedding spectrum vs.\ loss-surface curvature) and share no information, yet converge simultaneously across all seeds}{figure.caption.3}{}}
-\newlabel{fig:fourier@cref}{{[figure][3][]3}{[1][3][]4}{}{}{}}
-\newlabel{sec:discussion}{{5}{4}{}{section.5}{}}
-\newlabel{sec:discussion@cref}{{[section][5][]5}{[1][4][]4}{}{}{}}
+\newlabel{sec:discussion}{{5}{2}{}{section.5}{}}
+\newlabel{sec:discussion@cref}{{[section][5][]5}{[1][2][]2}{}{}{}}
 \bibdata{references}
 \bibcite{competing_basins2026}{{1}{2026}{{Author(s) of arXiv:2603.01192}}{{}}}
 \bibcite{hoogland2024developmental}{{2}{2024}{{Hoogland et~al.}}{{Hoogland, Goldman-Wetzler, Akhbardeh, Loeng, and Murfet}}}
 \bibcite{hutchinson1990stochastic}{{3}{1990}{{Hutchinson}}{{}}}
 \bibcite{kingma2015adam}{{4}{2015}{{Kingma \& Ba}}{{Kingma and Ba}}}
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:training}{{1}{3}{\textbf {Three-phase grokking arc} (mean~$\pm $~std, 5 seeds). Training accuracy reaches 100\% early; test accuracy stays near random chance ($\ln 97 \approx 4.6$ nats) until the abrupt grokking transition (mean step $\approx $2\,700). Test loss peaks \emph {above} the random-chance baseline during the plateau, confirming active suppression of generalisation before the algorithmic switch}{figure.caption.1}{}}
+\newlabel{fig:training@cref}{{[figure][1][]1}{[1][2][]3}{}{}{}}
+\newlabel{fig:dissociation}{{2}{3}{\textbf {$\operatorname {tr}(H)$ collapses at grokking; SGLD-LLC does not} (mean~$\pm $~std, 5 seeds; both axes log scale). \emph {Left (blue):} $\operatorname {tr}(H)$ rises during memorisation then collapses $\sim \!4.1\times $—from $\sim \!52{,}000$ (plateau) to $\sim \!12{,}500$ (post-grokking). \emph {Right (purple):} SGLD-LLC stabilises at $\sim \!1{,}900$ and remains flat across the grokking transition. The two probes diverge because $\operatorname {tr}(H)$ captures local basin curvature (which changes) while SGLD-LLC captures global multiplicity (which does not)}{figure.caption.2}{}}
+\newlabel{fig:dissociation@cref}{{[figure][2][]2}{[1][2][]3}{}{}{}}
+\newlabel{sec:conclusion}{{6}{3}{}{section.6}{}}
+\newlabel{sec:conclusion@cref}{{[section][6][]6}{[1][3][]3}{}{}{}}
 \bibcite{loshchilov2019decoupled}{{5}{2019}{{Loshchilov \& Hutter}}{{Loshchilov and Hutter}}}
 \bibcite{nanda2023progress}{{6}{2023}{{Nanda et~al.}}{{Nanda, Lawrence, Chan, MacDougall, and Mahajan}}}
 \bibcite{power2022grokking}{{7}{2022}{{Power et~al.}}{{Power, Bhatt, Bhatt, Gur-Ari, and Nakkiran}}}
@@ -46,6 +46,6 @@
 \bibcite{watanabe2009algebraic}{{9}{2009}{{Watanabe}}{{}}}
 \bibcite{watanabe2013widely}{{10}{2013}{{Watanabe}}{{}}}
 \bibstyle{icml2026}
-\newlabel{sec:conclusion}{{6}{5}{}{section.6}{}}
-\newlabel{sec:conclusion@cref}{{[section][6][]6}{[1][5][]5}{}{}{}}
-\gdef \@abspage@last{5}
+\newlabel{fig:fourier}{{3}{4}{\textbf {Circuit Imprint: loss-geometry independently recovers circuit dimensionality} (mean~$\pm $~std, 5 seeds). \emph {Left:} Token-embedding Fourier spectrum (single representative seed; bright = high amplitude). At the grokking transition (green dashed line) $\sim \!11$ frequencies activate sharply while all others remain near zero. \emph {Right:} Active frequency count (orange, $\sim \!11$ post-grokking) and $\hat \lambda _H$ (teal, $20\!\pm \!2$ post-grokking) transition at the same training step and converge to consistent values. The two signals are derived from entirely different objects—embedding spectrum vs.\ loss-surface curvature—and share no information, yet agree quantitatively across all seeds}{figure.caption.3}{}}
+\newlabel{fig:fourier@cref}{{[figure][3][]3}{[1][2][]4}{}{}{}}
+\gdef \@abspage@last{4}
